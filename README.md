@@ -17,7 +17,8 @@ ECHOES is a browser-based, first-person mystery adventure built around three con
 ### What you can do
 
 - Explore interactive 3D environments and investigate objects.
-- Follow a live map through the forest and search for evidence.
+- Hold a live map and compass; track your position and bearing as you explore.
+- Operate the field phone to decrypt messages, contact witnesses, and review your case file.
 - Question characters, use inventory tools, and connect clues across cases.
 - Walk up to a character or portrait to open a separate in-world phone chat with message bubbles, typing feedback, and conversation memory.
 - Play a shared-device co-op case with 2–4 named investigators who take turns and share evidence.
@@ -57,11 +58,14 @@ npm run preview
 | Toggle flashlight | **F** or the flashlight button |
 | Pick up or drop an object | **E** |
 | Use a held food, water, or medical item | **E** or **USE** |
+| Equip a map or compass | Select it in your inventory |
+| Open the field phone | **PHONE** button or select the phone in your inventory |
+| Use phone apps | Open **Messages**, **Field Map**, **Compass**, or **Case File** |
 | Climb the forest hill | **Space** |
 | Ask for suggestions | Type **help** in the command box |
 | Pass the co-op turn | **P** or **PASS TO NEXT** |
 
-In Level 1, use the field map to find landmarks and clues. In Levels 2 and 3, look for a wall switch to light the room. Walk up the staircase in the manor to inspect the upper landing. When you see **click to talk**, interact with the character to raise the field phone. Choose a suggested question or type naturally into the phone's message box. Ask a follow-up such as “why?”, “tell me more,” or “what did you say?”; close the chat with its back button or **Escape**. Use **STOP MUSIC** and **PLAY MUSIC** to control the soundtrack.
+Equip the paper map to see a live top-down view of your current level, or equip the compass to read its moving north needle. The phone's **Messages** app decrypts field dispatches in Level 1; in later levels, it opens local witness channels. **Field Map**, **Compass**, and **Case File** remain available as phone apps. In Levels 2 and 3, look for a wall switch to light the room. Walk up the staircase in the manor to inspect the upper landing. When you see **click to talk**, interact with a character to open their phone conversation. Choose a suggested question or type naturally into the message box. Close the phone with its × button or **Escape**. Use **STOP MUSIC** and **PLAY MUSIC** to control the soundtrack.
 
 ## The three cases
 
@@ -79,7 +83,7 @@ Each level displays its real-world learning rule next to the objectives:
 | Closed Museum | **11 — Sustainable Cities and Communities** | Respect cultural heritage and preserve artifacts while investigating. |
 | Crime Scene | **16 — Peace, Justice and Strong Institutions** | Follow evidence, question assumptions, and seek a fair outcome. |
 
-Conversations take place in the in-game field phone, separate from the investigation command log. Each witness has a distinct voice, suggested questions, a persistent per-character chat thread, follow-up context, recaps, and evidence-aware replies. The local story engine handles natural-language topic matching but does not connect to ChatGPT or another hosted AI model; it is deliberately limited to the game's canon and requires no API key or internet connection:
+The field phone includes Messages, Field Map, Compass, and Case File apps. Conversations take place in the phone, separate from the investigation command log. Each witness has a distinct voice, suggested questions, a persistent per-character chat thread, follow-up context, recaps, and evidence-aware replies. The local story engine handles natural-language topic matching but does not connect to ChatGPT or another hosted AI model; it is deliberately limited to the game's canon and requires no API key or internet connection:
 
 | Character | Voice and role in the story |
 | --- | --- |

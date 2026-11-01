@@ -44,11 +44,11 @@
         </div>
         <div class="howto-card">
           <h3>3. Use Every Tool</h3>
-          <p>Click food, water, or medical supplies to hold them, then press <b>E</b> to use. Find the wall switches; use the map and level music controls.</p>
+          <p>Hold food, water, medical supplies, the live map, or compass from your inventory. Open the field phone to decrypt messages, check your bearing, review clues, and contact witnesses.</p>
         </div>
         <div class="howto-card">
           <h3>4. Talk &amp; Ask</h3>
-          <p>When a character is in view, click to talk. Your character's portrait opens on the in-game phone. Ask your own question or tap a prompt; close the phone with its back button or <b>ESC</b>.</p>
+          <p>When a character is in view, click to talk. Open the phone's Messages, Field Map, Compass, and Case File apps. Ask witnesses a question or tap a prompt; press <b>ESC</b> to put the phone away.</p>
         </div>
       </div>
       <div class="core-mechanic">
@@ -108,6 +108,7 @@
           </div>
           <div class="quick-controls">
             <button type="button" class="quick-tool" onclick="toggleFlashlight()" aria-label="Toggle flashlight">🔦 LIGHT</button>
+            <button type="button" class="quick-tool" onclick="useItemById('phone')" aria-label="Open field phone">📱 PHONE</button>
             <button type="button" class="quick-tool music-button" id="musicButton" onclick="toggleMusic()" aria-label="Stop background music" aria-pressed="true">♫ STOP MUSIC</button>
             <button type="button" class="action-button" id="actionButton" onclick="actionButtonAction()">INSPECT</button>
           </div>
@@ -165,29 +166,53 @@
       </div>
     </div>
     <div class="phone-overlay" id="phoneChatOverlay" hidden>
-      <section class="phone-shell" role="dialog" aria-modal="true" aria-labelledby="conversationName">
+      <section class="phone-shell" role="dialog" aria-modal="true" aria-label="ECHOES field phone">
         <div class="phone-statusbar"><span id="phoneClock">23:42</span><span>●●● &nbsp; ◉ &nbsp; ▰</span></div>
-        <header class="phone-header">
-          <button class="phone-back" type="button" onclick="endConversation()" aria-label="Close conversation">‹</button>
-          <div class="phone-avatar" id="phoneAvatar" aria-hidden="true">E</div>
-          <div class="phone-contact">
-            <strong id="conversationName">Character</strong>
-            <span><i class="phone-online-dot"></i><span id="phoneContactStatus">CASE CHANNEL · STORY-AWARE</span></span>
+        <div class="phone-home-view" id="phoneHomeView">
+          <div class="phone-home-heading">
+            <span>FIELD TERMINAL · ECHOES OS</span>
+            <strong id="phoneHomeGreeting">Good afternoon, investigator.</strong>
+            <small>LOCAL DEVICE · CASE DATA ENCRYPTED</small>
           </div>
-          <button class="phone-close" type="button" onclick="endConversation()" aria-label="Close phone chat">×</button>
-        </header>
-        <div class="phone-story-note" id="phoneStoryNote">
-          <strong>FIELD GUIDE</strong>
-          <span>Ask in your own words. Try “what happened?”, “why?” or “tell me more.” These story characters remember their conversation and only know what they witnessed.</span>
+          <div class="phone-app-grid" aria-label="Field phone apps">
+            <button type="button" class="phone-app" onclick="openPhoneApp('messages')"><span class="phone-app-icon messages-icon">✉</span><strong>Messages</strong><small>Dispatch &amp; witnesses</small></button>
+            <button type="button" class="phone-app" onclick="openPhoneApp('map')"><span class="phone-app-icon map-icon">⌖</span><strong>Field map</strong><small>Live position &amp; route</small></button>
+            <button type="button" class="phone-app" onclick="openPhoneApp('compass')"><span class="phone-app-icon compass-icon">✥</span><strong>Compass</strong><small>Heading &amp; bearing</small></button>
+            <button type="button" class="phone-app" onclick="openPhoneApp('case')"><span class="phone-app-icon case-icon">▤</span><strong>Case file</strong><small>Clues &amp; objectives</small></button>
+          </div>
+          <div class="phone-device-footer"><span>● GPS LOCKED</span><span id="phoneBatteryStatus">BATTERY 84%</span></div>
         </div>
-        <div class="phone-thread" id="phoneMessages" role="log" aria-live="polite" aria-relevant="additions"></div>
-        <div class="phone-typing" id="phoneTyping" hidden><span></span><span></span><span></span><small>writing a reply</small></div>
-        <div class="phone-suggestions" id="conversationSuggestions" aria-label="Suggested questions"></div>
-        <form class="phone-composer" id="phoneComposer">
-          <label class="sr-only" for="phoneMessageInput">Message the character</label>
-          <input id="phoneMessageInput" name="message" maxlength="400" placeholder="Message…" autocomplete="off" />
-          <button type="submit" aria-label="Send message">➤</button>
-        </form>
+        <div class="phone-app-view" id="phoneAppView" hidden>
+          <header class="phone-app-toolbar">
+            <button type="button" class="phone-back" onclick="showPhoneHome()" aria-label="Back to phone home">‹</button>
+            <strong id="phoneAppTitle">Field map</strong>
+            <button type="button" class="phone-close" onclick="endConversation()" aria-label="Close field phone">×</button>
+          </header>
+          <div class="phone-app-content" id="phoneAppContent"></div>
+        </div>
+        <div class="phone-conversation-view" id="phoneConversationView" hidden>
+          <header class="phone-header">
+            <button class="phone-back" type="button" onclick="phoneBack()" aria-label="Back to phone">‹</button>
+            <div class="phone-avatar" id="phoneAvatar" aria-hidden="true">E</div>
+            <div class="phone-contact">
+              <strong id="conversationName">Character</strong>
+              <span><i class="phone-online-dot"></i><span id="phoneContactStatus">CASE CHANNEL · STORY-AWARE</span></span>
+            </div>
+            <button class="phone-close" type="button" onclick="endConversation()" aria-label="Close phone chat">×</button>
+          </header>
+          <div class="phone-story-note" id="phoneStoryNote">
+            <strong>FIELD GUIDE</strong>
+            <span>Ask in your own words. Try “what happened?”, “why?” or “tell me more.” These story characters remember their conversation and only know what they witnessed.</span>
+          </div>
+          <div class="phone-thread" id="phoneMessages" role="log" aria-live="polite" aria-relevant="additions"></div>
+          <div class="phone-typing" id="phoneTyping" hidden><span></span><span></span><span></span><small>writing a reply</small></div>
+          <div class="phone-suggestions" id="conversationSuggestions" aria-label="Suggested questions"></div>
+          <form class="phone-composer" id="phoneComposer">
+            <label class="sr-only" for="phoneMessageInput">Message the character</label>
+            <input id="phoneMessageInput" name="message" maxlength="400" placeholder="Message…" autocomplete="off" />
+            <button type="submit" aria-label="Send message">➤</button>
+          </form>
+        </div>
         <div class="phone-home-indicator" aria-hidden="true"></div>
       </section>
     </div>

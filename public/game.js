@@ -27,6 +27,9 @@ let smokeParticles = [], treeMeshes = [], footprintMeshes = [], peopleMeshes = [
 let roomStudy = null, roomHall = null;
 let heldToolRig = null, equippedItemId = null;
 let phoneRig = null, phoneRigOpen = false, previousHeldItem = null;
+let phoneScreenCanvas = null, phoneScreenContext = null, phoneScreenTexture = null;
+let mapToolTexture = null, mapToolCanvas = null, compassNeedle = null, activePhoneApp = "home";
+let lastPhoneReadoutUpdate = 0;
 let conversationTarget = null;
 let conversationHistory = {};
 let phoneThreads = {};
@@ -154,8 +157,8 @@ function initThree() {
   flashlight.target.position.set(0, -0.05, -5);
   camera.add(flashlight.target);
   heldToolRig = new THREE.Group();
-  heldToolRig.position.set(0.48, -0.47, -0.8);
-  heldToolRig.scale.setScalar(0.66);
+  heldToolRig.position.set(0.43, -0.22, -0.76);
+  heldToolRig.scale.setScalar(0.68);
   camera.add(heldToolRig);
   phoneRig = new THREE.Group();
   phoneRig.visible = false;
@@ -185,11 +188,13 @@ function onResize() {
 function setupControls() {
   const canvas = document.getElementById("gameCanvas");
   window.addEventListener("keydown", e => {
-    if (e.code === "Escape" && conversationTarget) {
+    const phoneOverlay=document.getElementById("phoneChatOverlay");
+    if (e.code === "Escape" && phoneOverlay && !phoneOverlay.hidden) {
       e.preventDefault();
       endConversation();
       return;
     }
+    if (phoneOverlay && !phoneOverlay.hidden) return;
     if (e.target instanceof HTMLElement && e.target.matches("input,textarea,select,[contenteditable='true']")) return;
     if (document.activeElement === document.getElementById("commandInput") ||
         !document.getElementById("game").classList.contains("active") ||
@@ -258,43 +263,198 @@ function setupControls() {
   setTimeout(() => { const h = document.getElementById("lookHint"); if (h) h.classList.add("fade"); }, 12000);
   document.getElementById("phoneComposer").addEventListener("submit",sendPhoneMessage);
 }
+function addHandSegment(group,start,end,radiusStart,radiusEnd,material) {
+  const direction=new THREE.Vector3().subVectors(end,start);
+  const segment=new THREE.Mesh(
+    new THREE.CylinderGeometry(radiusEnd,radiusStart,direction.length(),10),
+    material
+  );
+  segment.position.copy(start).add(end).multiplyScalar(0.5);
+  segment.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction.normalize());
+  segment.castShadow=true;
+  group.add(segment);
+  return segment;
+}
+function buildGripHand(rig,options={}) {
+  const hand=new THREE.Group();
+  const mirrored=options.mirrored?-1:1;
+  const scale=options.scale||1;
+  hand.position.set(options.x||0,options.y||0,options.z||0);
+  hand.scale.set(scale*mirrored,scale,scale);
+  rig.add(hand);
+  const skin=new THREE.MeshPhysicalMaterial({
+    color:options.skinColor||0xb77b5d,roughness:0.82,clearcoat:0.06,
+    emissive:0x160a06,emissiveIntensity:0.18
+  });
+  const sleeveMaterial=new THREE.MeshStandardMaterial({color:options.sleeveColor||0x303936,roughness:0.96});
+  const cuffMaterial=new THREE.MeshStandardMaterial({color:0x56605a,roughness:0.82});
+  const forearm=new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.115,0.43,16),sleeveMaterial);
+  forearm.rotation.set(-0.68,0,-0.14);
+  forearm.position.set(-0.025,-0.245,0.075);
+  forearm.castShadow=true;
+  hand.add(forearm);
+  const cuff=new THREE.Mesh(new THREE.CylinderGeometry(0.082,0.09,0.07,16),cuffMaterial);
+  cuff.rotation.copy(forearm.rotation);
+  cuff.position.set(-0.012,-0.065,-0.03);
+  hand.add(cuff);
+  const palm=new THREE.Mesh(new THREE.SphereGeometry(0.105,18,14),skin);
+  palm.scale.set(0.96,1.18,0.49);
+  palm.position.set(0.018,0.005,-0.145);
+  palm.castShadow=true;
+  hand.add(palm);
+
+  const fingerOffsets=[-0.058,-0.019,0.02,0.057];
+  fingerOffsets.forEach((offset,index)=>{
+    const length=0.105+(index===0||index===3?-0.012:0.008);
+    const start=new THREE.Vector3(offset, 0.015, -0.17);
+    const middle=new THREE.Vector3(offset+0.006, -0.035-length*0.34, -0.36);
+    const tip=new THREE.Vector3(offset+0.018, -0.015-length*0.78, -0.345);
+    addHandSegment(hand,start,middle,0.027,0.021,skin);
+    addHandSegment(hand,middle,tip,0.021,0.016,skin);
+    const joint=new THREE.Mesh(new THREE.SphereGeometry(0.021,10,8),skin);
+    joint.position.copy(middle);
+    hand.add(joint);
+    const nail=new THREE.Mesh(new THREE.SphereGeometry(0.012,8,6),
+      new THREE.MeshStandardMaterial({color:0xd9b7a3,roughness:0.68}));
+    nail.scale.set(0.75,1,0.35);
+    nail.position.set(tip.x,tip.y-0.012,tip.z-0.012);
+    hand.add(nail);
+  });
+  const thumbStart=new THREE.Vector3(0.09,0.025,-0.16);
+  const thumbJoint=new THREE.Vector3(0.145,-0.025,-0.31);
+  const thumbTip=new THREE.Vector3(0.112,-0.09,-0.34);
+  addHandSegment(hand,thumbStart,thumbJoint,0.034,0.028,skin);
+  addHandSegment(hand,thumbJoint,thumbTip,0.028,0.021,skin);
+  const thumbJointMesh=new THREE.Mesh(new THREE.SphereGeometry(0.027,10,8),skin);
+  thumbJointMesh.position.copy(thumbJoint);
+  hand.add(thumbJointMesh);
+  return hand;
+}
 function buildHeldPhone() {
-  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.12,0.42,14),
-    new THREE.MeshStandardMaterial({color:0x303b39,roughness:0.94}));
-  sleeve.rotation.x=-0.74; sleeve.rotation.z=-0.3; sleeve.position.set(-0.02,-0.28,0.08);
-  phoneRig.add(sleeve);
-  const hand = new THREE.Mesh(new THREE.SphereGeometry(0.12,14,10),
-    new THREE.MeshStandardMaterial({color:0xb98260,roughness:0.82}));
-  hand.scale.set(1.05,0.76,1.3); hand.position.set(0.04,-0.17,-0.1); phoneRig.add(hand);
+  buildGripHand(phoneRig,{x:-0.01,y:0.12,z:0.02,scale:1.04,mirrored:true,sleeveColor:0x303b39});
   const frame = new THREE.Mesh(new THREE.BoxGeometry(0.39,0.69,0.055),
     new THREE.MeshStandardMaterial({color:0x12191d,metalness:0.62,roughness:0.28}));
   frame.position.set(0.035,0.12,-0.27); phoneRig.add(frame);
-  const screenCanvas=document.createElement("canvas");
-  screenCanvas.width=128; screenCanvas.height=256;
-  const context=screenCanvas.getContext("2d");
-  context.fillStyle="#101a19"; context.fillRect(0,0,128,256);
-  context.fillStyle="#174338"; context.fillRect(0,0,128,36);
-  context.fillStyle="#e2ece4"; context.font="bold 9px sans-serif"; context.fillText("ECHOES · CASE CHAT",8,15);
-  context.fillStyle="#9fbea8"; context.font="7px sans-serif"; context.fillText("LOCAL • SECURE THREAD",8,27);
-  context.fillStyle="#293a34"; context.beginPath(); context.roundRect(7,48,84,38,7); context.fill();
-  context.fillStyle="#dce8df"; context.font="7px sans-serif"; context.fillText("I remember the",13,62); context.fillText("details you asked me.",13,73);
-  context.fillStyle="#2a654b"; context.beginPath(); context.roundRect(38,97,82,30,7); context.fill();
-  context.fillStyle="#e4f0e5"; context.fillText("What happened",45,110); context.fillText("after closing?",45,120);
-  context.fillStyle="#293a34"; context.beginPath(); context.roundRect(7,139,104,48,7); context.fill();
-  context.fillStyle="#dce8df"; context.fillText("A long coat. A hard",13,153); context.fillText("case. I cannot see",13,164); context.fillText("the visitor's face.",13,175);
-  context.fillStyle="#2a654b"; context.beginPath(); context.roundRect(11,220,106,22); context.fill();
-  context.fillStyle="#a9c2b0"; context.font="7px sans-serif"; context.fillText("Message the witness…",18,234);
-  const screenTexture=new THREE.CanvasTexture(screenCanvas);
-  screenTexture.encoding=THREE.sRGBEncoding;
+  phoneScreenCanvas=document.createElement("canvas");
+  phoneScreenCanvas.width=256; phoneScreenCanvas.height=512;
+  phoneScreenContext=phoneScreenCanvas.getContext("2d");
+  drawPhoneScreen();
+  phoneScreenTexture=new THREE.CanvasTexture(phoneScreenCanvas);
+  phoneScreenTexture.encoding=THREE.sRGBEncoding;
   const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.35,0.63),
-    new THREE.MeshBasicMaterial({map:screenTexture}));
+    new THREE.MeshBasicMaterial({map:phoneScreenTexture}));
   screen.position.set(0.035,0.12,-0.239); phoneRig.add(screen);
   const cameraDot = new THREE.Mesh(new THREE.CircleGeometry(0.012,10),
     new THREE.MeshBasicMaterial({color:0x11151a}));
   cameraDot.position.set(0.035,0.417,-0.235); phoneRig.add(cameraDot);
-  const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.085,12,10),
-    new THREE.MeshStandardMaterial({color:0xc38c68,roughness:0.8}));
-  thumb.scale.set(1,0.78,1.2); thumb.position.set(0.245,-0.03,-0.24); phoneRig.add(thumb);
+  const sideButton = new THREE.Mesh(new THREE.BoxGeometry(0.014,0.075,0.025),
+    new THREE.MeshStandardMaterial({color:0x687579,metalness:0.7,roughness:0.25}));
+  sideButton.position.set(-0.167,0.12,-0.27); phoneRig.add(sideButton);
+}
+function drawPhoneScreen() {
+  if(!phoneScreenContext||!phoneScreenCanvas) return;
+  const ctx=phoneScreenContext,w=phoneScreenCanvas.width,h=phoneScreenCanvas.height;
+  ctx.fillStyle="#0d1717";ctx.fillRect(0,0,w,h);
+  if(activePhoneApp==="map") {
+    renderFieldMap(phoneScreenCanvas,ctx,true);
+    ctx.fillStyle="rgba(22,39,32,0.92)";ctx.fillRect(0,0,w,45);
+    ctx.fillStyle="#e6f0e5";ctx.font="bold 14px sans-serif";ctx.fillText("FIELD MAP",14,20);
+    ctx.fillStyle="#bad2be";ctx.font="10px sans-serif";ctx.fillText(`${currentPhoneTime()}  ·  GPS LOCKED`,14,36);
+    if(phoneScreenTexture) phoneScreenTexture.needsUpdate=true;
+    return;
+  }
+  const gradient=ctx.createLinearGradient(0,0,w,h);
+  gradient.addColorStop(0,"#1d5140");gradient.addColorStop(1,"#122a29");
+  ctx.fillStyle=gradient;ctx.fillRect(0,0,w,92);
+  ctx.fillStyle="#e6f0e5";ctx.font="bold 19px sans-serif";ctx.fillText("ECHOES FIELD",17,35);
+  ctx.fillStyle="#bad2be";ctx.font="12px sans-serif";
+  ctx.fillText(`${currentPhoneTime()}  ·  GPS LOCKED`,17,61);
+  ctx.fillText(`LEVEL ${state.level}  ·  ${state.location.toUpperCase().slice(0,22)}`,17,80);
+  if(activePhoneApp==="compass") {
+    const centerX=w/2,centerY=285,radius=82;
+    ctx.fillStyle="#bdc7a6";ctx.beginPath();ctx.arc(centerX,centerY,radius+8,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#263b32";ctx.beginPath();ctx.arc(centerX,centerY,radius,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle="#c7d4b8";ctx.lineWidth=2;
+    for(let i=0;i<32;i++) {
+      const angle=i*Math.PI/16,inner=radius-(i%4===0?13:7);
+      ctx.beginPath();ctx.moveTo(centerX+Math.sin(angle)*inner,centerY-Math.cos(angle)*inner);
+      ctx.lineTo(centerX+Math.sin(angle)*radius,centerY-Math.cos(angle)*radius);ctx.stroke();
+    }
+    const degree=(((-player.yaw*180/Math.PI)%360)+360)%360,angle=degree*Math.PI/180;
+    ctx.fillStyle="#f1e4c4";ctx.font="bold 15px sans-serif";ctx.textAlign="center";
+    ctx.fillText("N",centerX,centerY-radius-22);ctx.fillText("E",centerX+radius+20,centerY+5);
+    ctx.fillText("S",centerX,centerY+radius+28);ctx.fillText("W",centerX-radius-20,centerY+5);
+    ctx.strokeStyle="#e94e3d";ctx.lineWidth=5;ctx.beginPath();
+    ctx.moveTo(centerX,centerY);ctx.lineTo(centerX+Math.sin(angle)*65,centerY-Math.cos(angle)*65);ctx.stroke();
+    ctx.strokeStyle="#e7e2d4";ctx.beginPath();
+    ctx.moveTo(centerX,centerY);ctx.lineTo(centerX-Math.sin(angle)*43,centerY+Math.cos(angle)*43);ctx.stroke();
+    ctx.fillStyle="#e6f0e5";ctx.beginPath();ctx.arc(centerX,centerY,6,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle="#b6d2b7";ctx.font="bold 15px sans-serif";
+    ctx.fillText(`${degree.toFixed(0).padStart(3,"0")}° ${compassCardinal(degree)}`,centerX,420);
+    ctx.textAlign="left";
+    if(phoneScreenTexture) phoneScreenTexture.needsUpdate=true;
+    return;
+  }
+  if(activePhoneApp==="messages") {
+    const unread=Math.max(0,2-state.memory.messagesRead);
+    ctx.fillStyle="#e4eee5";ctx.font="bold 15px sans-serif";ctx.fillText("SECURE MESSAGES",17,122);
+    ctx.fillStyle="#9fbea8";ctx.font="11px sans-serif";ctx.fillText(`${unread} UNREAD DISPATCH${unread===1?"":"ES"}`,17,143);
+    const subjects=state.level===1?["FIELD WARNING","CAMPSITE COMPROMISED"]:state.level===2
+      ?["EGYPTIAN ARTIFACT","THE KNIGHT","DINOSAUR SENSOR","MUSEUM PORTRAIT"]:["DR. VALE","ANNA","CASE DISPATCH"];
+    subjects.slice(0,4).forEach((subject,index)=>{
+      const y=170+index*70;
+      ctx.fillStyle="#203731";ctx.beginPath();ctx.roundRect(15,y,226,56,10);ctx.fill();
+      ctx.fillStyle=index<state.memory.messagesRead?"#85c796":"#d6bd82";ctx.font="bold 10px sans-serif";
+      ctx.fillText(index<state.memory.messagesRead?"READ":"NEW",25,y+18);
+      ctx.fillStyle="#e4eee5";ctx.font="bold 11px sans-serif";ctx.fillText(subject,25,y+38);
+    });
+    if(phoneScreenTexture) phoneScreenTexture.needsUpdate=true;
+    return;
+  }
+  if(activePhoneApp==="case") {
+    ctx.fillStyle="#e4eee5";ctx.font="bold 15px sans-serif";ctx.fillText("CASE FILE",17,122);
+    ctx.fillStyle="#9fbea8";ctx.font="11px sans-serif";ctx.fillText(`${state.clues.length} CLUES · LEVEL ${state.level}`,17,143);
+    state.clues.slice(-5).forEach((clue,index)=>{
+      const y=165+index*62;
+      ctx.fillStyle="#203731";ctx.beginPath();ctx.roundRect(15,y,226,50,9);ctx.fill();
+      ctx.fillStyle="#d9bd7a";ctx.font="bold 10px sans-serif";ctx.fillText(String(index+1).padStart(2,"0"),24,y+18);
+      ctx.fillStyle="#e4eee5";ctx.font="10px sans-serif";
+      const text=clue.length>37?clue.slice(0,34)+"…":clue;
+      ctx.fillText(text,48,y+20);
+    });
+    if(phoneScreenTexture) phoneScreenTexture.needsUpdate=true;
+    return;
+  }
+  if(activePhoneApp==="conversation"&&conversationTarget) {
+    const thread=phoneThreads[conversationTarget]||[];
+    ctx.fillStyle="#e4eee5";ctx.font="bold 14px sans-serif";
+    ctx.fillText((characterChatbots[conversationTarget]?.name||"WITNESS").toUpperCase().slice(0,23),15,119);
+    thread.slice(-4).forEach((message,index)=>{
+      const y=145+index*77;
+      ctx.fillStyle=message.sender==="player"?"#2a654b":"#293a34";
+      ctx.beginPath();ctx.roundRect(14,y,message.sender==="player"?213:228,62,11);ctx.fill();
+      ctx.fillStyle="#dce8df";ctx.font="10px sans-serif";
+      ctx.fillText(message.text.slice(0,35),24,y+22);
+      if(message.text.length>35)ctx.fillText(message.text.slice(35,68)+"…",24,y+39);
+    });
+    if(phoneScreenTexture) phoneScreenTexture.needsUpdate=true;
+    return;
+  }
+  const apps=[["✉","MESSAGES"],["⌖","FIELD MAP"],["✥","COMPASS"],["▤","CASE FILE"]];
+  apps.forEach((app,index)=>{
+    const col=index%2,row=Math.floor(index/2),x=17+col*116,y=119+row*118;
+    ctx.fillStyle="#1d302d";ctx.beginPath();ctx.roundRect(x,y,103,91,16);ctx.fill();
+    ctx.fillStyle=index===0?"#a8d7b4":index===1?"#dcc58a":index===2?"#f19c83":"#b3c5e0";
+    ctx.font="32px sans-serif";ctx.fillText(app[0],x+34,y+44);
+    ctx.fillStyle="#e4eee5";ctx.font="bold 10px sans-serif";ctx.fillText(app[1],x+18,y+68);
+  });
+  ctx.fillStyle="#8ca796";ctx.font="10px sans-serif";
+  ctx.fillText(`POSITION  ${player.x.toFixed(1)} / ${player.z.toFixed(1)}`,17,376);
+  ctx.fillText("TAP AN APP TO OPEN",17,397);
+  ctx.fillStyle="#1a332b";ctx.fillRect(17,424,222,60);
+  ctx.fillStyle="#a7d2ab";ctx.font="bold 11px sans-serif";ctx.fillText("SECURE CASE CHANNEL",28,448);
+  ctx.fillStyle="#c7d7ca";ctx.font="10px sans-serif";ctx.fillText("Witness replies are stored locally.",28,466);
+  if(phoneScreenTexture) phoneScreenTexture.needsUpdate=true;
 }
 function showInstr(title, body) {
   document.getElementById("instrTitle").textContent = title;
@@ -484,19 +644,23 @@ function clearHeldTool() {
     heldToolRig.remove(child);
     disposeObjectResources(child);
   }
+  heldToolRig.visible=true;
+  mapToolTexture=null;
+  mapToolCanvas=null;
+  compassNeedle=null;
   equippedItemId=null;
 }
 function equipHeldItem(id) {
   if (!heldToolRig || equippedItemId === id) return;
   clearHeldTool();
   equippedItemId=id;
-  const sleeve=new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.11,0.36,12),
-    new THREE.MeshStandardMaterial({color:0x343d3b,roughness:0.92}));
-  sleeve.rotation.x=-0.78; sleeve.rotation.z=-0.28; sleeve.position.set(-0.04,-0.1,0.08);
-  heldToolRig.add(sleeve);
-  const hand=new THREE.Mesh(new THREE.SphereGeometry(0.105,12,10),
-    new THREE.MeshStandardMaterial({color:0xb98260,roughness:0.85}));
-  hand.scale.set(1,0.8,1.15); hand.position.set(0.01,-0.015,-0.08); heldToolRig.add(hand);
+  if(id==="phone") {
+    heldToolRig.visible=false;
+    phoneRig.visible=true;
+    updateActionButton();
+    return;
+  }
+  buildGripHand(heldToolRig,{x:id==="map"?-0.18:0,y:0.12,z:0.015});
   const metal=new THREE.MeshStandardMaterial({color:0x35434a,metalness:0.72,roughness:0.3});
   const dark=new THREE.MeshStandardMaterial({color:0x1c2428,metalness:0.55,roughness:0.4});
   if (id==="flashlight") {
@@ -536,8 +700,64 @@ function equipHeldItem(id) {
         new THREE.MeshStandardMaterial({color:0xb34e46,roughness:0.55}));
       tablet.position.set(-0.015+col*0.07,-0.015+row*0.1,-0.265); heldToolRig.add(tablet);
     }
-  } else if (id==="phone") {
-    phoneRig.visible=true;
+  } else if (id==="map") {
+    mapToolCanvas=document.createElement("canvas");
+    mapToolCanvas.width=360;mapToolCanvas.height=360;
+    renderFieldMap(mapToolCanvas,mapToolCanvas.getContext("2d"),true);
+    if(mapToolCanvas) {
+      mapToolTexture=new THREE.CanvasTexture(mapToolCanvas);
+      mapToolTexture.encoding=THREE.sRGBEncoding;
+      const sheet=new THREE.Mesh(new THREE.PlaneGeometry(0.67,0.52),
+        new THREE.MeshStandardMaterial({map:mapToolTexture,color:0xffffff,roughness:0.9,side:THREE.DoubleSide}));
+      sheet.position.set(-0.2,0.15,-0.31);
+      sheet.rotation.x=0.14;
+      heldToolRig.add(sheet);
+      const edgeMaterial=new THREE.MeshStandardMaterial({color:0x9b8054,roughness:0.92});
+      [[0,0.267], [0,-0.267]].forEach(([x,y])=>{
+        const fold=new THREE.Mesh(new THREE.BoxGeometry(0.65,0.008,0.006),edgeMaterial);
+        fold.position.set(-0.2,y+0.15,-0.305);
+        heldToolRig.add(fold);
+      });
+    }
+  } else if (id==="compass") {
+    const housing=new THREE.Mesh(new THREE.CylinderGeometry(0.19,0.19,0.055,36),
+      new THREE.MeshStandardMaterial({color:0xa98245,metalness:0.8,roughness:0.27}));
+    housing.rotation.x=Math.PI/2;
+    housing.position.set(0.025,0.12,-0.32);
+    heldToolRig.add(housing);
+    const bezel=new THREE.Mesh(new THREE.TorusGeometry(0.17,0.012,8,36),
+      new THREE.MeshStandardMaterial({color:0xd9bd7a,metalness:0.88,roughness:0.2}));
+    bezel.position.set(0.025,0.12,-0.29);
+    heldToolRig.add(bezel);
+    const glass=new THREE.Mesh(new THREE.CircleGeometry(0.158,36),
+      new THREE.MeshPhysicalMaterial({color:0x78969a,transparent:true,opacity:0.34,roughness:0.08,metalness:0.14,side:THREE.DoubleSide}));
+    glass.position.set(0.025,0.12,-0.282);
+    heldToolRig.add(glass);
+    const tickMaterial=new THREE.MeshStandardMaterial({color:0xe8dfc7,metalness:0.25,roughness:0.5});
+    for(let i=0;i<16;i++) {
+      const angle=i*Math.PI/8;
+      const tick=new THREE.Mesh(new THREE.BoxGeometry(0.006,i%4===0?0.035:0.018,0.003),tickMaterial);
+      tick.position.set(0.025+Math.sin(angle)*0.132,0.12+Math.cos(angle)*0.132,-0.276);
+      tick.rotation.z=-angle;
+      heldToolRig.add(tick);
+    }
+    const needle=new THREE.Group();
+    needle.position.set(0.025,0.12,-0.27);
+    compassNeedle=needle;
+    const northShape=new THREE.Shape();
+    northShape.moveTo(0,0.12);northShape.lineTo(-0.025,0);northShape.lineTo(0,0.015);northShape.lineTo(0.025,0);northShape.closePath();
+    const southShape=new THREE.Shape();
+    southShape.moveTo(0,-0.1);southShape.lineTo(-0.022,0);southShape.lineTo(0,0.012);southShape.lineTo(0.022,0);southShape.closePath();
+    const north=new THREE.Mesh(new THREE.ShapeGeometry(northShape),
+      new THREE.MeshBasicMaterial({color:0xe94e3d,side:THREE.DoubleSide}));
+    const south=new THREE.Mesh(new THREE.ShapeGeometry(southShape),
+      new THREE.MeshBasicMaterial({color:0xe7e2d4,side:THREE.DoubleSide}));
+    needle.add(north,south);
+    heldToolRig.add(needle);
+    const cap=new THREE.Mesh(new THREE.SphereGeometry(0.018,12,8),
+      new THREE.MeshStandardMaterial({color:0xd9bd7a,metalness:0.8,roughness:0.24}));
+    cap.position.set(0.025,0.12,-0.266);
+    heldToolRig.add(cap);
   }
   updateActionButton();
 }
@@ -580,12 +800,14 @@ function useItemById(id) {
     return;
   }
   else if (id === "phone") {
-    state.memory.messagesRead++;
-    advanceTime(2);
-    if (state.memory.messagesRead===1) { addMsg("warning",'"Don\'t follow the smoke."'); addClue("Phone: Don't follow the smoke"); }
-    else if (state.memory.messagesRead===2) { addMsg("warning",'"Campsite compromised. East when ready."'); addClue("Phone: campsite compromised, head east"); state.info+=8; }
-    else addMsg("ai","No new messages. Battery low.");
-  } else if (id === "compass") { addMsg("ai","Needle settles: smoke north, road east, hill west, water south."); state.info+=3; }
+    if(!document.getElementById("phoneChatOverlay").hidden) { endConversation(); return; }
+    openFieldPhone();
+    return;
+  } else if (id==="map"||id==="compass") {
+    if(equippedItemId===id) { unequipHeldItem(); return; }
+    equipHeldItem(id);
+    addMsg("system",id==="map"?"You unfold the field map. Your position updates as you move.":"You raise the compass. The needle tracks north as you turn.");
+  }
   else if (id === "key") addMsg("system","Strange Key — cold, unknown symbol.");
   else if (id === "journal") addMsg("ai",'Journal: "Signal near ridge. Don\'t trust the phone. Leave."');
   updateUI();
@@ -786,6 +1008,210 @@ function updatePhoneMemory(id) {
     : "Ask in your own words. Try “what happened?”, “why?” or “tell me more.” Characters only know what they witnessed.";
   guide.append(label,text);
 }
+function showPhoneHome() {
+  activePhoneApp="home";
+  conversationTarget=null;
+  document.getElementById("phoneHomeView").hidden=false;
+  document.getElementById("phoneAppView").hidden=true;
+  document.getElementById("phoneConversationView").hidden=true;
+  document.getElementById("phoneTyping").hidden=true;
+  document.getElementById("phoneHomeGreeting").textContent=
+    state.hour<12?"Good morning, investigator.":state.hour<18?"Good afternoon, investigator.":"Good evening, investigator.";
+  document.getElementById("phoneClock").textContent=currentPhoneTime();
+  updatePhoneDeviceReadouts();
+}
+function openFieldPhone() {
+  const overlay=document.getElementById("phoneChatOverlay");
+  if(overlay.hidden) previousHeldItem=equippedItemId==="phone"?previousHeldItem:equippedItemId;
+  conversationTarget=null;
+  phoneRigOpen=true;
+  if(state.inventory.some(item=>item.id==="phone")) equipHeldItem("phone");
+  else phoneRig.visible=true;
+  overlay.hidden=false;
+  showPhoneHome();
+  updateUI();
+  document.getElementById("gameCanvas").blur();
+}
+function phoneBack() {
+  conversationTarget=null;
+  showPhoneHome();
+}
+function openPhoneApp(app) {
+  if(!document.getElementById("phoneChatOverlay")||document.getElementById("phoneChatOverlay").hidden) return;
+  activePhoneApp=app;
+  document.getElementById("phoneHomeView").hidden=true;
+  document.getElementById("phoneConversationView").hidden=true;
+  document.getElementById("phoneAppView").hidden=false;
+  const title=document.getElementById("phoneAppTitle");
+  const content=document.getElementById("phoneAppContent");
+  content.replaceChildren();
+  const titles={messages:"Messages",map:"Field map",compass:"Compass",case:"Case file"};
+  title.textContent=titles[app]||"Field phone";
+  if(app==="messages") renderPhoneMessages(content);
+  else if(app==="map") {
+    const canvas=document.createElement("canvas");
+    canvas.id="phoneMapCanvas";
+    canvas.width=360;canvas.height=360;
+    canvas.setAttribute("role","img");
+    canvas.setAttribute("aria-label","Live tactical map showing your position and case landmarks");
+    content.appendChild(canvas);
+    const legend=document.createElement("p");
+    legend.className="phone-map-status";
+    legend.id="phoneMapStatus";
+    content.appendChild(legend);
+    renderFieldMap(canvas,canvas.getContext("2d"));
+    updatePhoneDeviceReadouts();
+  } else if(app==="compass") {
+    const compass=document.createElement("div");
+    compass.className="phone-compass-face";
+    compass.innerHTML='<span class="phone-compass-north">N</span><span class="phone-compass-east">E</span><span class="phone-compass-south">S</span><span class="phone-compass-west">W</span><i class="phone-compass-needle"></i><b class="phone-compass-pivot"></b>';
+    content.appendChild(compass);
+    const reading=document.createElement("p");
+    reading.className="phone-compass-reading";
+    reading.id="phoneCompassReading";
+    content.appendChild(reading);
+    const note=document.createElement("p");
+    note.className="phone-app-note";
+    note.textContent="The red needle points to magnetic north. Turn in place to watch the bearing change.";
+    content.appendChild(note);
+    updatePhoneDeviceReadouts();
+  } else if(app==="case") renderPhoneCase(content);
+}
+function renderPhoneMessages(content) {
+  content.replaceChildren();
+  if(state.level===1) {
+    const messages=[
+      {sender:"UNKNOWN NUMBER",subject:"FIELD WARNING",body:"Don't follow the smoke. The ridge wind is pushing it east. Look for the trail markers before you move.",clue:"Phone: Don't follow the smoke"},
+      {sender:"FIELD DISPATCH",subject:"CAMPSITE COMPROMISED",body:"Campsite compromised. East when ready. Keep to the marked road and check the stream for a safe route.",clue:"Phone: campsite compromised, head east"}
+    ];
+    const intro=document.createElement("p");
+    intro.className="phone-app-note";
+    intro.textContent="Two encrypted dispatches were recovered from your lock screen.";
+    content.appendChild(intro);
+    messages.forEach((message,index)=>{
+      const card=document.createElement("article");
+      card.className="phone-message-card";
+      const meta=document.createElement("small");
+      meta.textContent=`${message.sender} · ${index<state.memory.messagesRead?"READ":"UNREAD"}`;
+      const title=document.createElement("strong");
+      title.textContent=message.subject;
+      const body=document.createElement("p");
+      body.textContent=index<state.memory.messagesRead?message.body:"Encrypted field dispatch. Tap to decrypt and add it to your case file.";
+      card.append(meta,title,body);
+      if(index===state.memory.messagesRead) {
+        const button=document.createElement("button");
+        button.type="button";
+        button.className="phone-app-action";
+        button.textContent="DECRYPT MESSAGE";
+        button.addEventListener("click",()=>readFieldMessage(index,message));
+        card.appendChild(button);
+      }
+      content.appendChild(card);
+    });
+    if(state.memory.messagesRead>=messages.length) {
+      const footer=document.createElement("p");
+      footer.className="phone-app-note";
+      footer.textContent="No further dispatches. The rest of the signal is only static.";
+      content.appendChild(footer);
+    }
+    return;
+  }
+  const contacts=state.level===2
+    ?[["artifact","Egyptian Artifact","Artifact witness channel"],["knight","The Knight","Gallery witness channel"],["dinosaur","Dinosaur Skeleton","Sensor echo channel"],["museumPortrait","Museum Portrait","Canvas witness channel"]]
+    :[["vale","Dr. Vale","Primary interview channel"],["anna","Anna","Witness interview channel"]];
+  const intro=document.createElement("p");
+  intro.className="phone-app-note";
+  intro.textContent=state.level===2?"Local museum witness channels are available; they work even without a network.":"Local manor witness channels are available; interviews are stored on this device.";
+  content.appendChild(intro);
+  contacts.forEach(([id,name,detail])=>{
+    const button=document.createElement("button");
+    button.type="button";
+    button.className="phone-contact-card";
+    const initials=name.split(/\s+/).map(part=>part[0]).join("").slice(0,2).toUpperCase();
+    const avatar=document.createElement("span");
+    avatar.className="phone-contact-avatar";
+    avatar.textContent=initials;
+    const text=document.createElement("span");
+    text.innerHTML=`<strong></strong><small></small>`;
+    text.querySelector("strong").textContent=name;
+    text.querySelector("small").textContent=detail;
+    const action=document.createElement("b");
+    action.textContent="›";
+    button.append(avatar,text,action);
+    button.addEventListener("click",()=>openWitnessConversation(id));
+    content.appendChild(button);
+  });
+}
+function openWitnessConversation(id) {
+  const startConversation={
+    artifact:talkArtifact,knight:talkKnight,dinosaur:talkDino,museumPortrait:talkMuseumPortrait,
+    vale:talkVale,anna:talkAnna
+  }[id];
+  if(startConversation) startConversation();
+}
+function readFieldMessage(index,message) {
+  if(state.level!==1||index!==state.memory.messagesRead) return;
+  const phone=state.inventory.find(item=>item.id==="phone");
+  if(phone&&phone.uses<=0) {
+    addMsg("warning","The field phone battery is depleted. Its saved messages are still available.");
+    return;
+  }
+  if(phone) phone.uses--;
+  state.memory.messagesRead++;
+  advanceTime(2);
+  addMsg("warning",`"${message.body}"`);
+  addClue(message.clue);
+  if(index===1) state.info=Math.min(100,state.info+8);
+  checkL1();
+  renderPhoneMessages(document.getElementById("phoneAppContent"));
+  updatePhoneDeviceReadouts();
+}
+function renderPhoneCase(content) {
+  const heading=document.createElement("p");
+  heading.className="phone-app-note";
+  heading.textContent=`LEVEL ${state.level} · ${state.clues.length} CLUES RECORDED`;
+  content.appendChild(heading);
+  if(!state.clues.length) {
+    const empty=document.createElement("p");
+    empty.className="phone-empty-state";
+    empty.textContent="No evidence filed yet. Inspect the scene, question witnesses, and decrypt dispatches to build your case.";
+    content.appendChild(empty);
+  } else state.clues.forEach((clue,index)=>{
+    const card=document.createElement("article");
+    card.className="phone-clue-card";
+    const number=document.createElement("span");
+    number.textContent=String(index+1).padStart(2,"0");
+    const text=document.createElement("p");
+    text.textContent=clue;
+    card.append(number,text);
+    content.appendChild(card);
+  });
+  const objectives=document.createElement("div");
+  objectives.className="phone-objectives";
+  state.objectives.forEach(objective=>{
+    const row=document.createElement("p");
+    row.textContent=`${objective.done?"✓":"○"}  ${objective.text}`;
+    objectives.appendChild(row);
+  });
+  content.appendChild(objectives);
+}
+function updatePhoneDeviceReadouts() {
+  const clock=document.getElementById("phoneClock");
+  if(clock) clock.textContent=currentPhoneTime();
+  const battery=document.getElementById("phoneBatteryStatus");
+  const phone=state.inventory.find(item=>item.id==="phone");
+  if(battery) battery.textContent=`BATTERY ${phone?Math.max(0,Math.round(phone.uses/5*100)):0}%`;
+  const mapStatus=document.getElementById("phoneMapStatus");
+  if(mapStatus) mapStatus.textContent=`${state.location} · ${player.x.toFixed(1)}, ${player.z.toFixed(1)}`;
+  const reading=document.getElementById("phoneCompassReading");
+  const degrees=(((-player.yaw*180/Math.PI)%360)+360)%360;
+  if(reading) reading.textContent=`${degrees.toFixed(0).padStart(3,"0")}°  ${compassCardinal(degrees)}  ·  LIVE BEARING`;
+  const phoneNeedle=document.querySelector(".phone-compass-needle");
+  if(phoneNeedle) phoneNeedle.style.transform=`translate(-50%,-88%) rotate(${degrees}deg)`;
+}
+function compassCardinal(degrees) {
+  return ["N","NE","E","SE","S","SW","W","NW"][Math.round(degrees/45)%8];
+}
 function beginCharacterConversation(id, openingLine) {
   const character=characterChatbots[id];
   if (!character) return;
@@ -814,6 +1240,10 @@ function beginCharacterConversation(id, openingLine) {
   });
   renderPhoneThread(id);
   document.getElementById("phoneChatOverlay").hidden=false;
+  document.getElementById("phoneHomeView").hidden=true;
+  document.getElementById("phoneAppView").hidden=true;
+  document.getElementById("phoneConversationView").hidden=false;
+  activePhoneApp="conversation";
   document.getElementById("phoneTyping").hidden=true;
   document.getElementById("phoneMessageInput").disabled=false;
   document.querySelector("#phoneComposer button[type='submit']").disabled=false;
@@ -821,11 +1251,15 @@ function beginCharacterConversation(id, openingLine) {
   document.getElementById("phoneMessageInput").focus();
 }
 function endConversation() {
-  const wasOpen=Boolean(conversationTarget);
+  const overlay=document.getElementById("phoneChatOverlay");
+  const wasOpen=Boolean(conversationTarget)||(overlay&&!overlay.hidden);
   conversationTarget=null;
   phoneRigOpen=false;
   if (phoneRig) phoneRig.visible=false;
-  document.getElementById("phoneChatOverlay").hidden=true;
+  overlay.hidden=true;
+  document.getElementById("phoneHomeView").hidden=false;
+  document.getElementById("phoneAppView").hidden=true;
+  document.getElementById("phoneConversationView").hidden=true;
   document.getElementById("phoneTyping").hidden=true;
   if (equippedItemId==="phone") {
     const restore=previousHeldItem;
@@ -2370,52 +2804,123 @@ function updateActionButton() {
     :currentHover&&currentHover.userData.grabbable?"PICK UP"
     :currentHover&&characterChatbots[currentHover.userData.id]?"TALK":"INSPECT";
 }
+function renderFieldMap(canvas,ctx,paper=false) {
+  if(!canvas||!ctx) return;
+  const width=canvas.width,height=canvas.height,pad=Math.max(14,width*0.055);
+  const extent=state.level===1?30:state.level===2?16:12;
+  const point=(x,z)=>({x:pad+(x+extent)/(extent*2)*(width-pad*2),y:pad+(z+extent)/(extent*2)*(height-pad*2)});
+  ctx.clearRect(0,0,width,height);
+  ctx.fillStyle=paper?"#8b7851":"#15211c";ctx.fillRect(0,0,width,height);
+  ctx.fillStyle=paper?"#e1d1a5":"#203126";ctx.fillRect(pad,pad,width-pad*2,height-pad*2);
+  ctx.save();
+  ctx.beginPath();ctx.rect(pad,pad,width-pad*2,height-pad*2);ctx.clip();
+  ctx.strokeStyle=paper?"rgba(86,78,54,0.15)":"rgba(204,218,184,0.11)";
+  ctx.lineWidth=Math.max(1,width/300);
+  const gridStep=extent/3;
+  for(let i=-extent;i<=extent;i+=gridStep) {
+    const vertical=point(i,-extent),horizontal=point(-extent,i);
+    ctx.beginPath();ctx.moveTo(vertical.x,pad);ctx.lineTo(vertical.x,height-pad);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(pad,horizontal.y);ctx.lineTo(width-pad,horizontal.y);ctx.stroke();
+  }
+  const line=(points,color,lineWidth)=>{
+    ctx.strokeStyle=color;ctx.lineWidth=lineWidth;ctx.lineJoin="round";ctx.lineCap="round";
+    ctx.beginPath();
+    points.forEach(([x,z],index)=>{
+      const p=point(x,z);
+      if(index===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);
+    });
+    ctx.stroke();
+  };
+  const landmark=(x,z,color,label)=>{
+    const p=point(x,z),r=Math.max(3,width/54);
+    ctx.fillStyle=color;ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=paper?"#344333":"#f2e8d2";ctx.font=`${Math.max(9,width/30)}px sans-serif`;
+    ctx.fillText(label,p.x+r+3,p.y+Math.max(3,width/100));
+  };
+  if(state.level===1) {
+    line(Array.from({length:15},(_,i)=>{const z=-12+i*2;return [14+Math.sin((z+5)*0.16)*0.52,z];}),"#927552",Math.max(3,width/50));
+    line(Array.from({length:15},(_,i)=>[-7+i*0.85,13+Math.sin(i*0.55)*0.55]),"#65bcb2",Math.max(2,width/80));
+    if(paper) {
+      const hill=point(-10,-6),unit=(width-pad*2)/(extent*2);
+      ctx.strokeStyle="rgba(102,112,74,0.3)";ctx.lineWidth=1.2;
+      for(let ring=1;ring<=5;ring++) {
+        ctx.beginPath();
+        ctx.ellipse(hill.x,hill.y,unit*(2.1+ring*0.58),unit*(1.9+ring*0.5),-0.18,0,Math.PI*2);
+        ctx.stroke();
+      }
+    }
+    landmark(8,-9,"#ff9b45","Camp");
+    landmark(-10,-6,"#a6b49b","Hill");
+    landmark(14,1,"#c3a278","Road");
+    landmark(-1,13,"#72c9bf","Stream");
+    landmark(0,10,"#e2d4ad","Start");
+  } else if(state.level===2) {
+    line([[-14,-14],[14,-14],[14,14],[-14,14],[-14,-14]],"#b29a6d",Math.max(2,width/90));
+    line([[-14,0],[14,0]],"#635e55",Math.max(2,width/100));
+    line([[0,-14],[0,14]],"#635e55",Math.max(2,width/100));
+    landmark(-7,-7,"#d4ad66","Egyptian wing");
+    landmark(7,-7,"#9cb7ca","Dinosaur");
+    landmark(-7,6,"#d38b70","Knight");
+    landmark(7,6,"#bca5d5","Portrait");
+    landmark(0,11,"#e2d4ad","Entrance");
+    ctx.fillStyle="rgba(218,198,154,0.1)";
+    const topLeft=point(-14,-14),bottomRight=point(14,14);
+    ctx.fillRect(topLeft.x,topLeft.y,bottomRight.x-topLeft.x,bottomRight.y-topLeft.y);
+  } else {
+    line([[-11,-6],[11,-6],[11,8],[-11,8],[-11,-6]],"#b29a6d",Math.max(2,width/90));
+    line([[-5,-6],[-5,8]],"#635e55",Math.max(2,width/100));
+    line([[5,-6],[5,8]],"#635e55",Math.max(2,width/100));
+    line([[-5,-6],[-5,-10],[5,-10],[5,-6]],"#b29a6d",Math.max(2,width/90));
+    landmark(8,0,"#ed9a65","Fireplace");
+    landmark(-8,3,"#c6ad7c","Stairs");
+    landmark(0,6,"#8cb7c2","Hall");
+    landmark(0,-8,"#d3a665","Study");
+    landmark(4,1,"#a2bb91","Terminal");
+  }
+  const playerPoint=point(player.x,player.z);
+  ctx.save();
+  ctx.translate(playerPoint.x,playerPoint.y);
+  ctx.rotate(-player.yaw);
+  ctx.fillStyle=paper?"#b84632":"#f5d26c";ctx.strokeStyle="#362c1c";ctx.lineWidth=Math.max(1,width/180);
+  ctx.beginPath();ctx.moveTo(0,-Math.max(7,width/24));ctx.lineTo(-Math.max(4,width/44),Math.max(4,width/40));ctx.lineTo(Math.max(4,width/44),Math.max(4,width/40));ctx.closePath();
+  ctx.fill();ctx.stroke();
+  ctx.restore();
+  ctx.restore();
+  ctx.fillStyle=paper?"#334331":"#f4e4c4";ctx.font=`bold ${Math.max(10,width/28)}px sans-serif`;
+  ctx.fillText(state.level===1?"FIELD":"FLOOR PLAN",pad+2,pad+Math.max(12,width/22));
+  ctx.fillStyle=paper?"#713e2e":"#dfc978";ctx.font=`bold ${Math.max(11,width/24)}px sans-serif`;
+  ctx.fillText("N",width/2-4,pad+Math.max(12,width/22));
+  if(paper) {
+    ctx.fillStyle="#5d5037";ctx.font="10px sans-serif";
+    ctx.fillText(`ECHOES FIELD SHEET  ·  ${player.x.toFixed(1)}, ${player.z.toFixed(1)}`,pad+2,height-pad/2);
+  }
+}
 function updateMiniMap(now) {
   const canvas=document.getElementById("miniMap");
   if(!canvas||!mapContext) return;
   const hud=document.getElementById("mapHud");
   const visible=state.level===1;
   hud.hidden=!visible;
-  if(!visible||now-lastMapUpdate<100) return;
+  if(now-lastMapUpdate<100) return;
   lastMapUpdate=now;
-  const ctx=mapContext, width=canvas.width, height=canvas.height, pad=12;
-  const point=(x,z)=>({x:pad+(x+30)/60*(width-pad*2),y:pad+(z+30)/60*(height-pad*2)});
-  ctx.clearRect(0,0,width,height);
-  ctx.fillStyle="rgba(8,17,14,0.83)"; ctx.beginPath(); ctx.arc(width/2,height/2,width/2-2,0,Math.PI*2); ctx.fill();
-  ctx.save(); ctx.beginPath(); ctx.arc(width/2,height/2,width/2-3,0,Math.PI*2); ctx.clip();
-  ctx.strokeStyle="rgba(191,211,172,0.12)"; ctx.lineWidth=1;
-  for(let i=-20;i<=20;i+=10) {
-    const vertical=point(i,-30),horizontal=point(-30,i);
-    ctx.beginPath();ctx.moveTo(vertical.x,pad);ctx.lineTo(vertical.x,height-pad);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(pad,horizontal.y);ctx.lineTo(width-pad,horizontal.y);ctx.stroke();
+  renderFieldMap(canvas,mapContext);
+  if(mapToolCanvas) {
+    renderFieldMap(mapToolCanvas,mapToolCanvas.getContext("2d"),true);
+    if(mapToolTexture) mapToolTexture.needsUpdate=true;
   }
-  ctx.strokeStyle="#8b7050";ctx.lineWidth=5;ctx.beginPath();
-  for(let i=0;i<=14;i++) {
-    const z=-12+i*2,x=14+Math.sin((z+5)*0.16)*0.52,p=point(x,z);
-    if(i===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);
-  }
-  ctx.stroke();
-  ctx.strokeStyle="#66b9b1";ctx.lineWidth=3;ctx.beginPath();
-  for(let i=0;i<=14;i++) {
-    const p=point(-7+i*0.85,13+Math.sin(i*0.55)*0.55);
-    if(i===0)ctx.moveTo(p.x,p.y);else ctx.lineTo(p.x,p.y);
-  }
-  ctx.stroke();
-  const landmark=(x,z,color,label,offsetX=6,offsetY=3)=>{
-    const p=point(x,z);ctx.fillStyle=color;ctx.beginPath();ctx.arc(p.x,p.y,4,0,Math.PI*2);ctx.fill();
-    ctx.fillStyle="#f2e8d2";ctx.font="12px sans-serif";ctx.fillText(label,p.x+offsetX,p.y+offsetY);
-  };
-  landmark(8,-9,"#ff9b45","Camp");landmark(-10,-6,"#a6b49b","Hill");
-  landmark(14,1,"#c3a278","Road",-31,-5);landmark(-1,13,"#72c9bf","Stream",-39,14);
-  const playerPoint=point(player.x,player.z);
-  ctx.translate(playerPoint.x,playerPoint.y);ctx.rotate(player.yaw);
-  ctx.fillStyle="#f5d26c";ctx.beginPath();ctx.moveTo(0,-8);ctx.lineTo(-5,5);ctx.lineTo(5,5);ctx.closePath();ctx.fill();
-  ctx.restore();
+  const phoneMap=document.getElementById("phoneMapCanvas");
+  if(phoneMap) renderFieldMap(phoneMap,phoneMap.getContext("2d"));
 }
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clockSys.getDelta(), 0.05);
   const t = clockSys.elapsedTime;
+  if(compassNeedle) compassNeedle.rotation.z=-player.yaw;
+  if(t-lastPhoneReadoutUpdate>0.15) {
+    lastPhoneReadoutUpdate=t;
+    updatePhoneDeviceReadouts();
+    drawPhoneScreen();
+  }
   if(phoneRig) {
     const targetY=phoneRigOpen?-0.26:-0.58;
     phoneRig.position.y+=(targetY-phoneRig.position.y)*Math.min(1,dt*7);
@@ -2626,7 +3131,11 @@ function addMsg(type,text,name){
 }
 
 function resetLevel(lvl) {
-  if (conversationTarget) endConversation();
+  if (!document.getElementById("phoneChatOverlay").hidden) endConversation();
+  clearHeldTool();
+  if(phoneRig) phoneRig.visible=false;
+  phoneRigOpen=false;
+  previousHeldItem=null;
   state.level=lvl; state.turn=0; state.levelComplete=false; state.clues=[];
   state.memory.flashlightOn=false;
   if(flashlight) flashlight.intensity=0;
@@ -2640,7 +3149,9 @@ function resetLevel(lvl) {
     state.inventory=[
       {id:"food",name:"🥫 Food",uses:3,desc:"Rations"},{id:"water",name:"💧 Water",uses:3,desc:"Water"},
       {id:"flashlight",name:"🔦 Flashlight",uses:40,desc:"F to toggle"},{id:"meds",name:"🩹 Meds",uses:2,desc:"Heal"},
-      {id:"phone",name:"📱 Phone",uses:5,desc:"Messages"},{id:"compass",name:"🧭 Compass",uses:99,desc:"Direction"}
+      {id:"phone",name:"📱 Phone",uses:5,desc:"Messages, live map, compass & case file"},
+      {id:"map",name:"🗺️ Map",uses:Infinity,desc:"Hold a live map of your current level"},
+      {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"}
     ];
     state.objectives=[{text:"Orient yourself",done:false},{text:"Investigate campsite",done:false},{text:"Hill or road",done:false},{text:"Clues 0/4",done:false}];
     setScene("Use the field map to find the stream, hill, camp and road. Follow the footprints.");
@@ -2651,7 +3162,12 @@ function resetLevel(lvl) {
     buildLevel2();
     state.health=95;state.food=3;state.water=3;state.safety=70;state.info=25;
     state.location="Museum — Egyptian Wing";
-    state.inventory=[{id:"flashlight",name:"🔦 Flashlight",uses:30,desc:"F"},{id:"phone",name:"📱 Phone",uses:3,desc:"No signal"}];
+    state.inventory=[
+      {id:"flashlight",name:"🔦 Flashlight",uses:30,desc:"F"},
+      {id:"phone",name:"📱 Phone",uses:3,desc:"Offline witness channels & case file"},
+      {id:"map",name:"🗺️ Map",uses:Infinity,desc:"Hold a live museum floor plan"},
+      {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"}
+    ];
     if(state.memory.foundObject){state.inventory.push({id:"key",name:"🗝️ Strange Key",uses:1,desc:"Chamber"});state.inventory.push({id:"journal",name:"📜 Torn Journal",uses:1,desc:"Warning"});}
     state.objectives=[{text:"Question exhibits",done:false},{text:"Search desk",done:false},{text:"Project Echo",done:false},{text:"Clues 0/4",done:false}];
     setScene("Find the brass wall switch to light the museum, then inspect the exhibits.");
@@ -2661,7 +3177,12 @@ function resetLevel(lvl) {
     buildLevel3();
     state.health=100;state.food=3;state.water=3;state.safety=45;state.info=20;
     state.location="Blackwood Manor — Grand Hall";
-    state.inventory=[{id:"flashlight",name:"🔦 Flashlight",uses:25,desc:"F"},{id:"phone",name:"📱 Phone",uses:2,desc:"No signal"}];
+    state.inventory=[
+      {id:"flashlight",name:"🔦 Flashlight",uses:25,desc:"F"},
+      {id:"phone",name:"📱 Phone",uses:2,desc:"Offline witness channels & case file"},
+      {id:"map",name:"🗺️ Map",uses:Infinity,desc:"Hold a live manor floor plan"},
+      {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"}
+    ];
     if(state.memory.foundObject) state.inventory.push({id:"key",name:"🗝️ Strange Key",uses:1,desc:"Echo link"});
     state.objectives=[{text:"Enter study",done:false},{text:"Question Vale & Anna",done:false},{text:"CCTV",done:false},{text:"Evidence 0/5",done:false}];
     setScene("Find the wall switch, inspect the hall, and walk up the staircase to the portrait landing.");
