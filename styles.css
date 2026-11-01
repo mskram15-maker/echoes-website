@@ -443,6 +443,14 @@ body {
   align-items:flex-end;
   gap:8px;
 }
+.quick-controls.phone-open {
+  top:14px;
+  right:auto;
+  bottom:auto;
+  left:14px;
+  z-index:203;
+}
+.quick-controls.phone-open > :not(#phoneQuickButton) { display:none; }
 .quick-tool, .action-button {
   min-height:44px;
   padding:0 14px;
@@ -1376,6 +1384,7 @@ button:focus-visible, input:focus-visible {
   .scene-text { font-size:0.92rem; }
   .stats-bar { padding:0.55rem 0.35rem; font-size:0.68rem; }
   .quick-controls { right:8px; bottom:8px; max-width:calc(100% - 76px); flex-wrap:wrap; justify-content:flex-end; gap:5px; }
+  .quick-controls.phone-open { top:14px; right:auto; bottom:auto; left:14px; max-width:none; }
   .quick-tool { min-height:38px; font-size:0.59rem; padding:0 8px; }
   .music-button { font-size:0.56rem; padding:0 7px; }
   .action-button { min-width:82px; min-height:38px; font-size:0.61rem; padding:0 8px; }

@@ -43,7 +43,7 @@ let investigationTeam = { members: [], activeIndex: 0 };
 let interiorFixtures = [], interiorSwitchMesh = null, interiorLightsOn = false;
 let fireFlames = [], fireEmbers = [], waterRipples = [];
 let atmosphereFields = [];
-let encounterState = { level:0, threat:null, active:false, cleared:false, progress:0, distractedUntil:0, failed:false };
+let encounterState = { level:0, threat:null, active:false, cleared:false, progress:0, distractedUntil:0, frozenUntil:0, freezeEffect:null, failed:false };
 let vaultObstacles = [];
 let vaultJumpTimer = 0;
 let mapContext = null, lastMapUpdate = 0;
@@ -165,7 +165,7 @@ function initThree() {
   flashlight.target.position.set(0, -0.05, -5);
   camera.add(flashlight.target);
   heldToolRig = new THREE.Group();
-  heldToolRig.position.set(0.43, -0.22, -0.76);
+  heldToolRig.position.set(0.28, -0.22, -0.76);
   heldToolRig.scale.setScalar(0.68);
   camera.add(heldToolRig);
   phoneRig = new THREE.Group();
@@ -199,7 +199,7 @@ function setupControls() {
     const phoneOverlay=document.getElementById("phoneChatOverlay");
     if (e.code === "Escape" && phoneOverlay && !phoneOverlay.hidden) {
       e.preventDefault();
-      endConversation();
+      toggleFieldPhone();
       return;
     }
     if (phoneOverlay && !phoneOverlay.hidden) return;
@@ -214,7 +214,7 @@ function setupControls() {
     if (e.repeat) return;
     if (e.code === "KeyF") toggleFlashlight();
     if (e.code === "Space") tryVaultOrClimb();
-    if (e.code === "KeyE") equippedItemId && ["food","water","meds","flare","ward"].includes(equippedItemId) ? useEquippedItem() : toggleGrab();
+    if (e.code === "KeyE") equippedItemId && ["food","water","meds","flare","ward","spray"].includes(equippedItemId) ? useEquippedItem() : toggleGrab();
     if (e.code === "KeyP" && investigationTeam.members.length > 1) passInvestigator();
   });
   peopleMeshes.forEach(person => {
@@ -290,10 +290,7 @@ function buildGripHand(rig,options={}) {
   hand.position.set(options.x||0,options.y||0,options.z||0);
   hand.scale.set(scale*mirrored,scale,scale);
   rig.add(hand);
-  const skin=new THREE.MeshPhysicalMaterial({
-    color:options.skinColor||0xb77b5d,roughness:0.72,clearcoat:0.12,clearcoatRoughness:0.62,
-    emissive:0x100704,emissiveIntensity:0.1
-  });
+  const glove=new THREE.MeshStandardMaterial({color:options.gloveColor||0x52584f,roughness:0.94});
   const sleeveMaterial=new THREE.MeshStandardMaterial({color:options.sleeveColor||0x303936,roughness:0.96});
   const cuffMaterial=new THREE.MeshStandardMaterial({color:0x56605a,roughness:0.82});
   const forearm=new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.115,0.43,16),sleeveMaterial);
@@ -305,48 +302,43 @@ function buildGripHand(rig,options={}) {
   cuff.rotation.copy(forearm.rotation);
   cuff.position.set(-0.012,-0.065,-0.03);
   hand.add(cuff);
-  const palm=new THREE.Mesh(new THREE.SphereGeometry(0.105,24,18),skin);
-  palm.scale.set(1.02,1.28,0.53);
+  const palm=new THREE.Mesh(new THREE.SphereGeometry(0.105,24,18),glove);
+  palm.scale.set(1.02,1.28,0.62);
   palm.position.set(0.018,0.005,-0.145);
   palm.castShadow=true;
   hand.add(palm);
 
-  const heel=new THREE.Mesh(new THREE.SphereGeometry(0.071,16,12),skin);
+  const heel=new THREE.Mesh(new THREE.SphereGeometry(0.071,16,12),glove);
   heel.scale.set(0.86,0.78,0.62);
   heel.position.set(-0.005,-0.075,-0.095);
   heel.castShadow=true;
   hand.add(heel);
-  const fingerOffsets=[-0.061,-0.021,0.02,0.06];
+  const fingerOffsets=[-0.065,-0.025,0.019,0.06];
   fingerOffsets.forEach((offset,index)=>{
-    const length=[0.125,0.15,0.145,0.12][index];
-    const start=new THREE.Vector3(offset,0.018,-0.17);
-    const knuckle=new THREE.Vector3(offset+0.004,-0.025,-0.225);
-    const middle=new THREE.Vector3(offset+0.012,-0.072-length*0.28,-0.29);
-    const tip=new THREE.Vector3(offset+0.018,-0.035-length*0.64,-0.34);
-    addHandSegment(hand,start,knuckle,0.027,0.024,skin);
-    addHandSegment(hand,knuckle,middle,0.024,0.019,skin);
-    addHandSegment(hand,middle,tip,0.019,0.015,skin);
-    for(const [jointPosition,radius] of [[knuckle,0.023],[middle,0.019]]) {
-      const joint=new THREE.Mesh(new THREE.SphereGeometry(radius,12,10),skin);
+    const width=[0.021,0.023,0.022,0.019][index];
+    const start=new THREE.Vector3(offset,0.045,-0.205);
+    const knuckle=new THREE.Vector3(offset+0.002,-0.015,-0.253);
+    const middle=new THREE.Vector3(offset+0.006,-0.078,-0.286);
+    const tip=new THREE.Vector3(offset+0.012,-0.122,-0.245);
+    addHandSegment(hand,start,knuckle,width,width*0.91,glove);
+    addHandSegment(hand,knuckle,middle,width*0.91,width*0.78,glove);
+    addHandSegment(hand,middle,tip,width*0.78,width*0.62,glove);
+    for(const [jointPosition,radius] of [[knuckle,width*0.9],[middle,width*0.76]]) {
+      const joint=new THREE.Mesh(new THREE.SphereGeometry(radius,12,10),glove);
       joint.position.copy(jointPosition);
       joint.castShadow=true;
       hand.add(joint);
     }
-    const nail=new THREE.Mesh(new THREE.SphereGeometry(0.013,10,8),
-      new THREE.MeshPhysicalMaterial({color:0xd3ad98,roughness:0.52,clearcoat:0.22}));
-    nail.scale.set(0.72,1.15,0.34);
-    nail.position.set(tip.x,tip.y-0.008,tip.z+0.016);
-    hand.add(nail);
   });
-  const thumbStart=new THREE.Vector3(0.09,0.025,-0.16);
-  const thumbBase=new THREE.Vector3(0.132,-0.005,-0.205);
-  const thumbJoint=new THREE.Vector3(0.151,-0.052,-0.28);
-  const thumbTip=new THREE.Vector3(0.108,-0.09,-0.325);
-  addHandSegment(hand,thumbStart,thumbBase,0.035,0.031,skin);
-  addHandSegment(hand,thumbBase,thumbJoint,0.031,0.025,skin);
-  addHandSegment(hand,thumbJoint,thumbTip,0.025,0.019,skin);
-  for(const [jointPosition,radius] of [[thumbBase,0.03],[thumbJoint,0.023]]) {
-    const joint=new THREE.Mesh(new THREE.SphereGeometry(radius,12,10),skin);
+  const thumbStart=new THREE.Vector3(0.09,0.015,-0.15);
+  const thumbBase=new THREE.Vector3(0.137,-0.025,-0.2);
+  const thumbJoint=new THREE.Vector3(0.15,-0.075,-0.25);
+  const thumbTip=new THREE.Vector3(0.105,-0.108,-0.247);
+  addHandSegment(hand,thumbStart,thumbBase,0.03,0.027,glove);
+  addHandSegment(hand,thumbBase,thumbJoint,0.027,0.022,glove);
+  addHandSegment(hand,thumbJoint,thumbTip,0.022,0.017,glove);
+  for(const [jointPosition,radius] of [[thumbBase,0.027],[thumbJoint,0.021]]) {
+    const joint=new THREE.Mesh(new THREE.SphereGeometry(radius,12,10),glove);
     joint.position.copy(jointPosition);
     joint.castShadow=true;
     hand.add(joint);
@@ -359,8 +351,8 @@ function buildGripHand(rig,options={}) {
   return hand;
 }
 function buildHeldPhone() {
-  buildGripHand(phoneRig,{x:-0.01,y:0.12,z:0.02,scale:1.04,mirrored:true,sleeveColor:0x303b39});
-  buildGripHand(phoneRig,{x:0.32,y:0.08,z:0.055,scale:0.82,sleeveColor:0x303b39});
+  buildGripHand(phoneRig,{x:-0.01,y:0.12,z:-0.13,scale:1.04,sleeveColor:0x303b39});
+  buildGripHand(phoneRig,{x:0.32,y:0.08,z:-0.1,scale:0.82,mirrored:true,sleeveColor:0x303b39});
   const frame = new THREE.Mesh(new THREE.BoxGeometry(0.39,0.69,0.055),
     new THREE.MeshStandardMaterial({color:0x12191d,metalness:0.62,roughness:0.28}));
   frame.position.set(0.035,0.12,-0.27); phoneRig.add(frame);
@@ -699,8 +691,8 @@ function equipHeldItem(id) {
     phoneRig.visible=false;
     phoneRigOpen=false;
   }
-  buildGripHand(heldToolRig,{x:id==="map"?-0.18:0,y:0.12,z:0.015});
-  if(id==="map") buildGripHand(heldToolRig,{x:0.38,y:0.1,z:0.025,scale:0.86,mirrored:true});
+  buildGripHand(heldToolRig,{x:id==="map"?-0.18:0,y:0.12,z:-0.12});
+  if(id==="map") buildGripHand(heldToolRig,{x:0.38,y:0.1,z:-0.1,scale:0.86,mirrored:true});
   const metal=new THREE.MeshStandardMaterial({color:0x35434a,metalness:0.72,roughness:0.3});
   const dark=new THREE.MeshStandardMaterial({color:0x1c2428,metalness:0.55,roughness:0.4});
   if (id==="flashlight") {
@@ -720,6 +712,19 @@ function equipHeldItem(id) {
     ring.position.set(0.04,0.08,-0.22);heldToolRig.add(ring);
     const grip=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.055,0.22,12),dark);
     grip.rotation.x=-Math.PI/2;grip.position.set(0.04,0.08,-0.04);heldToolRig.add(grip);
+  } else if(id==="spray") {
+    const can=new THREE.Mesh(new THREE.CylinderGeometry(0.095,0.105,0.34,18),
+      new THREE.MeshStandardMaterial({color:0xbfcbd0,metalness:0.22,roughness:0.34}));
+    can.rotation.x=-Math.PI/2;can.position.set(0.04,0.07,-0.27);heldToolRig.add(can);
+    const label=new THREE.Mesh(new THREE.CylinderGeometry(0.098,0.106,0.17,18,1,true),
+      new THREE.MeshStandardMaterial({color:0xe9e5d7,roughness:0.75,side:THREE.DoubleSide}));
+    label.rotation.x=-Math.PI/2;label.position.set(0.04,0.07,-0.27);heldToolRig.add(label);
+    const nozzle=new THREE.Mesh(new THREE.CylinderGeometry(0.027,0.032,0.09,12),
+      new THREE.MeshStandardMaterial({color:0x71868b,metalness:0.62,roughness:0.3}));
+    nozzle.rotation.x=-Math.PI/2;nozzle.position.set(0.04,0.07,-0.5);heldToolRig.add(nozzle);
+    const trigger=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.055,0.07),
+      new THREE.MeshStandardMaterial({color:0x7d3935,roughness:0.5}));
+    trigger.position.set(0.04,0.16,-0.2);heldToolRig.add(trigger);
   } else if (id==="water") {
     const bottle=new THREE.Mesh(new THREE.CylinderGeometry(0.115,0.13,0.38,16),
       new THREE.MeshPhysicalMaterial({color:0x6bafc1,roughness:0.18,metalness:0.04,transparent:true,opacity:0.82}));
@@ -825,7 +830,7 @@ function unequipHeldItem() {
   updateUI();
 }
 function useEquippedItem() {
-  if (!equippedItemId || !["food","water","meds","flare","ward"].includes(equippedItemId)) return false;
+  if (!equippedItemId || !["food","water","meds","flare","ward","spray"].includes(equippedItemId)) return false;
   const item=state.inventory.find(i=>i.id===equippedItemId);
   if (!item || item.uses<=0) { addMsg("system","There is none left to use."); return true; }
   if(equippedItemId==="flare") {
@@ -843,6 +848,27 @@ function useEquippedItem() {
     if(encounterState.active&&!encounterState.cleared&&state.level===2) {
       clearEncounter("The UV ward flares. The apparition recoils without harm, opening a route through the gallery.");
     } else addMsg("system","The UV ward creates a brief protective glow. Save its remaining charge for an apparition.");
+  } else if(equippedItemId==="spray") {
+    if(!encounterState.active||encounterState.cleared||
+      ![2,3].includes(state.level)||!encounterState.threat) {
+      addMsg("system","Keep the salt-mist can ready for the museum ghosts or the manor intruder.");
+      return true;
+    }
+    const dx=encounterState.threat.position.x-player.x;
+    const dz=encounterState.threat.position.z-player.z;
+    const distance=Math.hypot(dx,dz);
+    const towardX=distance?dx/distance:0,towardZ=distance?dz/distance:0;
+    const forwardX=-Math.sin(player.yaw),forwardZ=-Math.cos(player.yaw);
+    if(distance>9||forwardX*towardX+forwardZ*towardZ<0.7) {
+      addMsg("warning","Aim at the nearby threat and spray again. The canister charge was saved.");
+      return true;
+    }
+    item.uses--;
+    encounterState.frozenUntil=performance.now()/1000+4.5;
+    encounterState.progress=Math.max(0,encounterState.progress);
+    if(encounterState.freezeEffect) encounterState.freezeEffect.visible=true;
+    setEncounterHint("FROZEN · Move while the salt mist holds it still");
+    addMsg("system",`You spray the ${state.level===2?"ghost":"intruder"} with salt mist. It freezes in place for a few seconds—use the opening to move.`);
   } else if (equippedItemId==="food") {
     item.uses--; state.food=Math.max(0,state.food-0.4);
     state.health=Math.min(100,state.health+8); advanceTime(5);
@@ -866,12 +892,13 @@ function useItemById(id) {
   const item = state.inventory.find(i => i.id === id);
   if (!item) return;
   if (id === "flashlight") { toggleFlashlight(); return; }
-  if (["food","water","meds","flare","ward"].includes(id)) {
+  if (["food","water","meds","flare","ward","spray"].includes(id)) {
     if(equippedItemId===id) { unequipHeldItem(); return; }
     equipHeldItem(id);
     const instructions=id==="flare"
       ?"Press E or USE FLARE to create a bright, non-harmful distraction."
       :id==="ward"?"Press E or USE WARD to repel an apparition without harming it."
+      :id==="spray"?"Aim at a nearby threat and press E or USE SPRAY to freeze it briefly."
       :"Press E or USE to consume it.";
     addMsg("system",`You hold ${item.name.replace(/^\S+\s*/,"")}. ${instructions}`);
     updateUI();
@@ -1167,6 +1194,19 @@ function openFieldPhone() {
   updateUI();
   document.getElementById("gameCanvas").blur();
 }
+function toggleFieldPhone() {
+  const overlay=document.getElementById("phoneChatOverlay");
+  if(overlay&&!overlay.hidden) {
+    endConversation();
+    return;
+  }
+  if(phoneRigOpen||equippedItemId==="phone") {
+    endConversation();
+    return;
+  }
+  if(phonePoweredOn) openFieldPhone();
+  else togglePhonePower();
+}
 function togglePhonePower() {
   const layout=document.querySelector(".game-layout");
   if(phonePoweredOn) {
@@ -1428,10 +1468,8 @@ function endConversation() {
     if (restore&&state.inventory.some(item=>item.id===restore)) equipHeldItem(restore);
     else unequipHeldItem();
   }
-  if(wasOpen) {
-    updateUI();
-    document.getElementById("gameCanvas").focus();
-  }
+  updateUI();
+  if(wasOpen) document.getElementById("gameCanvas").focus();
 }
 function answerCharacterQuestion(id,question) {
   const character=characterChatbots[id];
@@ -1645,11 +1683,12 @@ function leaveStudy() {
     addMsg("warning","Reach the study doorway to get back to the hall.");
     return;
   }
-  if(encounterState.active&&!encounterState.cleared&&performance.now()/1000>encounterState.distractedUntil) {
-    addMsg("warning","The intruder is between you and the hall. Use a signal flare to distract them, then reach the study door.");
+  if(encounterState.active&&!encounterState.cleared&&
+    performance.now()/1000>Math.max(encounterState.distractedUntil,encounterState.frozenUntil)) {
+    addMsg("warning","The intruder is between you and the hall. Use a signal flare or salt-mist spray, then reach the study door.");
     return;
   }
-  if(encounterState.active&&!encounterState.cleared) clearEncounter("You make it back to the lit hall while the intruder is distracted. Help is on the way.");
+  if(encounterState.active&&!encounterState.cleared) clearEncounter("You make it back to the lit hall while the intruder is held back. Help is on the way.");
   state.memory.inStudy = false;
   state.location = "Blackwood Manor — Grand Hall";
   player.x = 0; player.z = 6; player.yaw = Math.PI;
@@ -1712,7 +1751,7 @@ function checkL3() {
     if(!state.memory.manorHallChairCleared) remaining.push("vault the fallen hall chair");
     if(!state.memory.manorHallChandelierCleared) remaining.push("vault the fallen chandelier");
     if(!encounterState.studyObstacleVaulted) remaining.push("vault the table");
-    if(encounterState.active&&!encounterState.cleared) remaining.push("distract the intruder and reach the hall");
+    if(encounterState.active&&!encounterState.cleared) remaining.push("distract or freeze the intruder and reach the hall");
     else if(state.memory.inStudy) remaining.push("return to the hall");
     addMsg("system",remaining.length
       ?`Evidence gathered. ${remaining.join(", ")} before presenting your case.`
@@ -1729,7 +1768,7 @@ function proveInnocence() {
     return;
   }
   if(encounterState.active&&!encounterState.cleared) {
-    addMsg("warning","Reach the hall safely before presenting your case. Distract the intruder with the flare, vault the overturned table, and use the study door.");
+    addMsg("warning","Reach the hall safely before presenting your case. Distract the intruder with a flare or freeze them with salt mist, vault the overturned table, and use the study door.");
     return;
   }
   addMsg("ai","You present the full timeline. Planted key. Camera alibi. Vale breaks.");
@@ -1757,7 +1796,7 @@ function clearWorld() {
   atmosphereFields=[];
   fireFlames=[]; fireEmbers=[]; waterRipples=[]; interiorFixtures=[]; interiorSwitchMesh=null;
   interiorLightsOn=false; hillMesh = null; fireLight = null; roomStudy = null; roomHall = null; heldObject = null;
-  encounterState={level:0,threat:null,active:false,cleared:false,progress:0,distractedUntil:0,failed:false,studyObstacleVaulted:false};
+  encounterState={level:0,threat:null,active:false,cleared:false,progress:0,distractedUntil:0,frozenUntil:0,freezeEffect:null,failed:false,studyObstacleVaulted:false};
   vaultObstacles=[];vaultJumpTimer=0;
   clearHeldTool();
   const rm = []; scene.traverse(o => { if (o.isLight && o !== flashlight) rm.push(o); });
@@ -2049,10 +2088,29 @@ function createEncounterThreat(level,parent=worldGroup,variant=0) {
     encounterState.nextThreat=group;
     return;
   }
-  encounterState={level,threat:group,active:false,cleared:false,progress:0,distractedUntil:0,failed:false,studyObstacleVaulted:false,phase:0,nextThreat:null};
+  encounterState={level,threat:group,active:false,cleared:false,progress:0,distractedUntil:0,frozenUntil:0,freezeEffect:null,failed:false,studyObstacleVaulted:false,phase:0,nextThreat:null};
   encounterState.name=names[level];
+  if(level===2||level===3) {
+    encounterState.freezeEffect=createFreezeEffect(group);
+  }
   const title=document.getElementById("encounterTitle");
   if(title) title.textContent=encounterState.name.toUpperCase();
+}
+function createFreezeEffect(threat) {
+  const effect=new THREE.Group();
+  const mistMaterial=new THREE.MeshBasicMaterial({color:0xc9edf1,transparent:true,opacity:0.62,depthWrite:false});
+  const mistGeometry=new THREE.SphereGeometry(0.16,10,8);
+  for(let i=0;i<14;i++) {
+    const mist=new THREE.Mesh(mistGeometry,mistMaterial);
+    const angle=i*Math.PI*2/14;
+    mist.position.set(Math.cos(angle)*(0.52+(i%3)*0.12),0.28+(i%5)*0.43,
+      Math.sin(angle)*(0.42+(i%2)*0.12));
+    mist.scale.setScalar(0.55+(i%4)*0.16);
+    effect.add(mist);
+  }
+  effect.visible=false;
+  threat.add(effect);
+  return effect;
 }
 function setEncounterHint(text) {
   const hint=document.getElementById("encounterHint");
@@ -2063,10 +2121,13 @@ function clearEncounter(message) {
     if(encounterState.threat) encounterState.threat.visible=false;
     encounterState.threat=encounterState.nextThreat;
     encounterState.nextThreat=null;
+    if(encounterState.freezeEffect) encounterState.freezeEffect.visible=false;
+    encounterState.freezeEffect=createFreezeEffect(encounterState.threat);
     encounterState.phase=1;
     encounterState.name=encounterState.nextThreatName;
     encounterState.progress=0;
     encounterState.distractedUntil=0;
+    encounterState.frozenUntil=0;
     encounterState.failed=false;
     encounterState.threat.visible=true;
     const title=document.getElementById("encounterTitle");
@@ -2125,13 +2186,17 @@ function updateEncounter(dt,time) {
   const distracted=performance.now()/1000<encounterState.distractedUntil;
   const title=document.getElementById("encounterTitle");
   const progress=document.getElementById("encounterProgress");
-  if(title) title.textContent=distracted?"DISTRACTION ACTIVE":encounterState.name.toUpperCase();
+  const frozen=performance.now()/1000<encounterState.frozenUntil;
+  if(encounterState.freezeEffect) encounterState.freezeEffect.visible=frozen;
+  if(title) title.textContent=frozen?"THREAT FROZEN":distracted?"DISTRACTION ACTIVE":encounterState.name.toUpperCase();
   const phoneOverlay=document.getElementById("phoneChatOverlay");
   if(document.activeElement===document.getElementById("commandInput")||(phoneOverlay&&!phoneOverlay.hidden)) {
     setEncounterHint("Threat paused while you review clues or use the field phone");
     return;
   }
-  if(beamHit) {
+  if(frozen) {
+    setEncounterHint("FROZEN · Move while the salt mist holds it still");
+  } else if(beamHit) {
     const repelTime=state.level===1?2.3:state.level===2&&encounterState.phase===1?4.1:3.2;
     encounterState.progress=Math.min(1,encounterState.progress+dt/repelTime);
     const away=new THREE.Vector3(-towardX,0,-towardZ);
@@ -2148,16 +2213,17 @@ function updateEncounter(dt,time) {
       :"Aim the flashlight at the threat");
   }
   if(progress) progress.style.width=`${Math.round(encounterState.progress*100)}%`;
-  threat.position.y=state.level===2?0.08+Math.sin(time*(encounterState.phase===1?4.2:2.7))*0.22:0;
-  threat.rotation.y=Math.atan2(player.x-threat.position.x,player.z-threat.position.z);
-  if(state.level===2) threat.rotation.z=Math.sin(time*(encounterState.phase===1?2.1:1.2))*0.045;
-  const pulse=1+Math.sin(time*(state.level===2?3.2:2.1))*0.035;
+  if(!frozen) threat.position.y=state.level===2?0.08+Math.sin(time*(encounterState.phase===1?4.2:2.7))*0.22:0;
+  if(!frozen) threat.rotation.y=Math.atan2(player.x-threat.position.x,player.z-threat.position.z);
+  if(state.level===2&&!frozen) threat.rotation.z=Math.sin(time*(encounterState.phase===1?2.1:1.2))*0.045;
+  const pulse=frozen?1:1+Math.sin(time*(state.level===2?3.2:2.1))*0.035;
   threat.scale.set(pulse,1,pulse);
+  if(encounterState.freezeEffect&&frozen) encounterState.freezeEffect.rotation.y=time*0.18;
   if(encounterState.progress>=1) clearEncounter(state.level===1
     ?"The flashlight holds the forest creature at bay until it slips back into the trees."
     :"The focused beam dissolves the spectral figure into the exhibit shadows.");
   if(!encounterState.cleared&&threat===encounterState.threat&&
-    !encounterState.failed&&distance<1.35&&!distracted) {
+    !encounterState.failed&&distance<1.35&&!distracted&&!frozen) {
     encounterState.failed=true;
     status.hidden=false;
     if(title) title.textContent="RETREATING TO SAFE START";
@@ -3442,7 +3508,7 @@ function checkHover() {
 function updateActionButton() {
   const actionButton=document.getElementById("actionButton");
   if (!actionButton) return;
-  actionButton.textContent=equippedItemId&&["food","water","meds","flare","ward"].includes(equippedItemId)
+  actionButton.textContent=equippedItemId&&["food","water","meds","flare","ward","spray"].includes(equippedItemId)
     ? equippedItemId==="flare"?"USE FLARE":equippedItemId==="ward"?"USE WARD":"USE "+equippedItemId.toUpperCase()
     : heldObject?"DROP":currentHover&&currentHover.userData.id==="wallSwitch"?"SWITCH"
     :currentHover&&currentHover.userData.grabbable?"PICK UP"
@@ -3579,7 +3645,7 @@ function animate() {
         keys["KeyD"]||keys["ArrowRight"]||keys["btn_right"]);
       const baseY=-0.22+Math.sin(t*(moving?9:1.2))* (moving?0.014:0.003);
       heldToolRig.position.x=THREE.MathUtils.lerp(heldToolRig.position.x,
-        0.43+Math.sin(t*4.5)*(moving?0.018:0.004),Math.min(1,dt*8));
+        0.28+Math.sin(t*4.5)*(moving?0.018:0.004),Math.min(1,dt*8));
       heldToolRig.position.y=THREE.MathUtils.lerp(heldToolRig.position.y,baseY,Math.min(1,dt*9));
       heldToolRig.rotation.x=THREE.MathUtils.lerp(heldToolRig.rotation.x,
         moving?Math.sin(t*9)*0.025:Math.sin(t*1.2)*0.006,Math.min(1,dt*8));
@@ -3738,8 +3804,8 @@ function closeIntro() {
   document.getElementById("gameCanvas").focus();
   onResize();
   if (state.level === 1) showInstr("BRIEFING — LEVEL 1 · EASY", "<b>Goal:</b> Find at least <b>4 clues</b> and vault the single marked trail log before leaving.<br><br>• <b>WASD</b> move · Drag to look<br>• Follow the live field map to the camp, hill, road and stream<br>• <b>F</b> flashlight · <b>SPACE</b> climb the hill or vault the marked fallen log<br>• Hold and use the signal flare with <b>E</b> if needed<br>• Click or tap the campsite, trees, road and footprints<br><br>Encounters are non-lethal: use the flashlight to hold the forest creature back. Watch the smoke. Follow the prints.");
-  else if (state.level === 2) showInstr("BRIEFING — LEVEL 2 · MEDIUM", "<b>Goal:</b> Uncover Project Echo — <b>4 clues</b> — restore the lights and vault <b>two blocked gallery routes</b>.<br><br>• Find the brass wall switch to light the museum<br>• Question the artifact, knight, dinosaur skeleton, and painted witness<br>• Search the curator's desk; click the portrait to talk or type <b>examine painting</b> to inspect it<br>• Press <b>SPACE</b> while moving forward near the fallen display and toppled pedestal<br>• Drive off both ghosts: aim the flashlight, or equip the UV repeller / signal flare and press <b>E</b>. The faster second ghost appears when the first vanishes.<br>• In team mode, pass the investigation between players; all discoveries are shared");
-  else showInstr("BRIEFING — LEVEL 3 · HARD", "<b>Goal:</b> Prove innocence — <b>5 evidence</b> pieces — restore the hall lights and vault <b>four obstacles</b> across the study and hall.<br><br>• Find the wall switch and click it to light the hall<br>• Walk up the staircase to reach the portrait landing<br>• Enter the <b>Study</b> through the door and inspect the clock, letter and weapon<br>• Question Vale and Anna; check the security terminal<br>• Use a signal flare to escape the faster intruder, vault the overturned study table, then return to the hall<br>• Vault the hall table, fallen chair, and shattered chandelier before presenting your case<br>• Return to the hall, then type <b>prove my innocence</b>");
+  else if (state.level === 2) showInstr("BRIEFING — LEVEL 2 · MEDIUM", "<b>Goal:</b> Uncover Project Echo — <b>4 clues</b> — restore the lights and vault <b>two blocked gallery routes</b>.<br><br>• Find the brass wall switch to light the museum<br>• Question the artifact, knight, dinosaur skeleton, and painted witness<br>• Search the curator's desk; click the portrait to talk or type <b>examine painting</b> to inspect it<br>• Press <b>SPACE</b> while moving forward near the fallen display and toppled pedestal<br>• Drive off both ghosts: aim the flashlight, use the UV repeller, or spray the salt-mist can at a nearby ghost and press <b>E</b> to freeze it for 4.5 seconds. The faster second ghost appears when the first vanishes.<br>• In team mode, pass the investigation between players; all discoveries are shared");
+  else showInstr("BRIEFING — LEVEL 3 · HARD", "<b>Goal:</b> Prove innocence — <b>5 evidence</b> pieces — restore the hall lights and vault <b>four obstacles</b> across the study and hall.<br><br>• Find the wall switch and click it to light the hall<br>• Walk up the staircase to reach the portrait landing<br>• Enter the <b>Study</b> through the door and inspect the clock, letter and weapon<br>• Question Vale and Anna; check the security terminal<br>• Use a signal flare to distract the faster intruder or aim the salt-mist can at them to freeze them for 4.5 seconds; vault the overturned study table, then return to the hall<br>• Vault the hall table, fallen chair, and shattered chandelier before presenting your case<br>• Return to the hall, then type <b>prove my innocence</b>");
 }
 function toggleMenu(){document.getElementById("sideMenu").classList.toggle("open");}
 function restartLevel(){resetLevel(state.level);document.getElementById("sideMenu").classList.remove("open");addMsg("system","Restarted.");}
@@ -3758,7 +3824,7 @@ function updateUI() {
   document.getElementById("sdgRuleLabel").textContent = sdgRule.label;
   document.getElementById("sdgRuleText").textContent = sdgRule.rule;
   document.getElementById("inventory").innerHTML = state.inventory.map(i=>{
-    const hl=/key|journal|flashlight|flare|ward/i.test(i.id)?" highlight":"";
+    const hl=/key|journal|flashlight|flare|ward|spray/i.test(i.id)?" highlight":"";
     const selected=equippedItemId===i.id?" selected":"";
     const uses=Number.isFinite(i.uses)?`<small>×${i.uses}</small>`:"";
     return `<button type="button" class="inv-item${hl}${selected}" title="${i.desc}" aria-pressed="${equippedItemId===i.id}" onclick="useItemById('${i.id}')"><span>${i.name}</span>${uses}</button>`;
@@ -3767,7 +3833,7 @@ function updateUI() {
   const commandHint = document.getElementById("commandHint");
   if (commandHint) {
     commandHint.textContent = state.level===1 ? "Try: examine road · check phone · head east"
-      : state.level===2 ? "Try: question the knight · ask the portrait · open chamber"
+      : state.level===2 ? "Try: question the knight · ask the portrait · salt mist"
       : "Try: talk to Vale · message Anna · check CCTV";
   }
   updateActionButton();
@@ -3779,8 +3845,10 @@ function updateUI() {
   }
   const phoneButton=document.getElementById("phoneQuickButton");
   if(phoneButton) {
-    phoneButton.textContent=phonePoweredOn?"📱 PHONE":"📱 POWER ON";
-    phoneButton.setAttribute("aria-label",phonePoweredOn?"Open field phone":"Power on field phone");
+    const phoneOpen=Boolean(phoneRigOpen||(!document.getElementById("phoneChatOverlay").hidden));
+    document.querySelector(".quick-controls")?.classList.toggle("phone-open",phoneOpen);
+    phoneButton.textContent=phoneOpen?"📱 PUT AWAY":phonePoweredOn?"📱 PHONE":"📱 POWER ON";
+    phoneButton.setAttribute("aria-label",phoneOpen?"Put field phone away":phonePoweredOn?"Open field phone":"Power on field phone");
   }
   const phonePowerButton=document.getElementById("phonePowerButton");
   if(phonePowerButton) {
@@ -3845,7 +3913,8 @@ function resetLevel(lvl) {
       {id:"map",name:"🗺️ Map",uses:Infinity,desc:"Hold a live museum floor plan"},
       {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"},
       {id:"flare",name:"🟠 Signal Flare",uses:1,desc:"Bright, non-harmful distraction · E to use"},
-      {id:"ward",name:"🛡️ UV Repeller",uses:2,desc:"Repels one apparition without harm · E to use"}
+      {id:"ward",name:"🛡️ UV Repeller",uses:2,desc:"Repels one apparition without harm · E to use"},
+      {id:"spray",name:"🧂 Salt Mist Can",uses:3,desc:"Aim at a nearby ghost or intruder and freeze it for 4.5 seconds"}
     ];
     if(state.memory.foundObject){state.inventory.push({id:"key",name:"🗝️ Strange Key",uses:1,desc:"Chamber"});state.inventory.push({id:"journal",name:"📜 Torn Journal",uses:1,desc:"Warning"});}
     state.objectives=[{id:"restorePower",text:"Restore power at the wall switch",done:state.memory.museumPowerRestored},{text:"Question exhibits",done:false},{text:"Search desk",done:false},{text:"Project Echo",done:false},{text:"Vault the fallen gallery display",done:false},{text:"Vault the toppled exhibit pedestal",done:false},{text:"Drive off both gallery ghosts",done:false},{text:"Clues 0/4",done:false}];
@@ -3861,7 +3930,8 @@ function resetLevel(lvl) {
       {id:"phone",name:"📱 Phone",uses:2,desc:"Offline witness channels & case file"},
       {id:"map",name:"🗺️ Map",uses:Infinity,desc:"Hold a live manor floor plan"},
       {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"},
-      {id:"flare",name:"🟠 Signal Flare",uses:2,desc:"Bright, non-harmful distraction · E to use"}
+      {id:"flare",name:"🟠 Signal Flare",uses:2,desc:"Bright, non-harmful distraction · E to use"},
+      {id:"spray",name:"🧂 Salt Mist Can",uses:2,desc:"Aim at the nearby intruder and freeze it for 4.5 seconds"}
     ];
     if(state.memory.foundObject) state.inventory.push({id:"key",name:"🗝️ Strange Key",uses:1,desc:"Echo link"});
     state.objectives=[{id:"restorePower",text:"Restore power in the grand hall",done:state.memory.manorPowerRestored},{text:"Enter study",done:false},{text:"Question Vale & Anna",done:false},{text:"CCTV",done:false},{text:"Vault the hall table",done:false},{text:"Vault the fallen hall chair",done:false},{text:"Vault the fallen chandelier",done:false},{text:"Vault the overturned table in the study",done:false},{text:"Evidence 0/5",done:false}];
@@ -3934,8 +4004,8 @@ function showCommandHelp() {
   const instructions = state.level===1
     ? "Level 1 (easy): examine camp, road, trees, or stream; use phone or compass; climb the hill; vault the marked trail log with Space. Hold the flashlight on the forest creature or use a signal flare, then leave after finding 4 clues."
     : state.level===2
-    ? "Level 2 (medium): click the Egyptian artifact, knight, dinosaur, or painting to open its field-phone chat. Ask in your own words or tap a suggested question. Examine the curator desk, repel both ghosts with the flashlight, UV repeller, or flare, and leave after finding 4 clues. Restore power and vault both the fallen display and toppled pedestal with Space."
-    : "Level 3 (hard): enter the study; examine the clock, letter, or weapon; click Vale, Anna, or the portrait to open a private field-phone chat. Ask follow-ups or request a recap, then check CCTV. Use a signal flare to distract the intruder, vault the study table and three hall obstacles (including the shattered chandelier), reach the study door, and return to the lit hall before proving your innocence.";
+    ? "Level 2 (medium): click the Egyptian artifact, knight, dinosaur, or painting to open its field-phone chat. Ask in your own words or tap a suggested question. Examine the curator desk, repel both ghosts with the flashlight or UV repeller, or aim the salt-mist can at a nearby ghost and press E to freeze it for 4.5 seconds. Restore power, vault both blocked routes, and find 4 clues."
+    : "Level 3 (hard): enter the study; examine the clock, letter, or weapon; click Vale, Anna, or the portrait to open a private field-phone chat. Ask follow-ups or request a recap, then check CCTV. Use a signal flare or spray the nearby intruder with the salt-mist can to freeze it for 4.5 seconds; vault the study table and three hall obstacles (including the shattered chandelier), reach the study door, and return to the lit hall before proving your innocence.";
   const teamTip = investigationTeam.members.length > 1 ? ` Team mode: press PASS TO NEXT or P to hand over the shared investigation.` : "";
   addMsg("ai",instructions + teamTip);
 }
@@ -3987,8 +4057,8 @@ function startLevel(lvl) {
   document.getElementById("introOverlay").classList.add("active");
   document.getElementById("introTitle").textContent=lvl===2?"LEVEL 2 — MUSEUM AFTER DARK · MEDIUM":"LEVEL 3 — THE FINAL CASE · HARD";
   document.getElementById("introText").textContent=lvl===2
-    ?"MEDIUM · Restore power, outmaneuver the gallery wraith, vault two blocked routes, and uncover 4 clues about Project Echo."
-    :"HARD · Restore power, escape the intruder, vault four obstacles across the study and hall, and gather 5 pieces of evidence.";
+    ?"MEDIUM · Restore power, outmaneuver two ghosts, use the UV repeller or salt mist, vault two blocked routes, and uncover 4 clues."
+    :"HARD · Restore power, escape the intruder with a flare or salt-mist spray, vault four obstacles, and gather 5 pieces of evidence.";
   resetLevel(lvl);
 }
 document.getElementById("playerCount").addEventListener("change",refreshTeamFields);
