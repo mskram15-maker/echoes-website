@@ -129,6 +129,15 @@ body {
   margin-bottom: 0.3rem;
 }
 .level-card p { font-size: 0.95rem; margin-bottom: 0.5rem; }
+.sdg-card-tag {
+  display: block;
+  min-height: 1.8em;
+  margin: 0.55rem 0 0.35rem;
+  color: #b7cba9;
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+}
 .stars { color: var(--accent-dim); font-size: 0.8rem; letter-spacing: 0.1em; }
 
 /* ========== PANEL SCREENS ========== */
@@ -460,12 +469,23 @@ body {
   border-bottom: 1px solid rgba(211,183,126,0.2);
   background: rgba(20, 29, 30, 0.78);
 }
+.header-labels { display: grid; gap: 0.38rem; }
 .level-badge {
   font-size: 0.72rem;
   letter-spacing: 0.1em;
   color: var(--accent);
   font-weight: 500;
 }
+.sdg-rule {
+  display: grid;
+  gap: 0.12rem;
+  padding-left: 0.55rem;
+  border-left: 2px solid #6caa64;
+  color: #bac6b2;
+  font-size: 0.65rem;
+  line-height: 1.4;
+}
+.sdg-rule strong { color: #9dc58e; font-size: 0.62rem; letter-spacing: 0.06em; }
 .menu-btn {
   background: none;
   border: none;
@@ -537,6 +557,52 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+}
+.conversation-panel {
+  display: none;
+  flex-shrink: 0;
+  padding: 0.6rem 1.1rem 0.7rem;
+  border-top: 1px solid rgba(211,183,126,0.22);
+  background: linear-gradient(120deg, rgba(37,49,44,0.94), rgba(22,31,34,0.96));
+  animation: fadeIn 0.25s ease;
+}
+.conversation-panel.active { display: block; }
+.conversation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.conversation-heading > div { display: grid; gap: 0.12rem; }
+.conversation-heading strong { color: #f0dfb8; font-size: 0.82rem; }
+.conversation-kicker { color: #a4b89c; font-size: 0.54rem; letter-spacing: 0.11em; }
+.end-conversation {
+  border: 1px solid rgba(211,183,126,0.38);
+  border-radius: 999px;
+  padding: 0.28rem 0.6rem;
+  background: transparent;
+  color: var(--muted);
+  font: 600 0.57rem var(--font-body);
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.end-conversation:hover { color: var(--text); border-color: var(--accent); }
+.conversation-suggestions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.conversation-suggestion {
+  padding: 0.34rem 0.55rem;
+  border: 1px solid rgba(160,184,147,0.22);
+  border-radius: 999px;
+  background: rgba(5,12,12,0.35);
+  color: #c9d4c1;
+  font: 0.66rem var(--font-body);
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, transform 0.18s;
+}
+.conversation-suggestion:hover {
+  transform: translateY(-1px);
+  border-color: #9db58e;
+  background: rgba(117,151,101,0.18);
 }
 .msg {
   font-size: 0.88rem;
@@ -831,6 +897,7 @@ button:focus-visible, input:focus-visible {
   .levels-preview { gap:0.65rem; }
   .level-card { padding:1rem 0.8rem; min-width:calc(33.333% - 0.5rem); flex:1; }
   .level-card p { font-size:0.82rem; }
+  .sdg-card-tag { font-size: 0.51rem; letter-spacing: 0.03em; }
   .level-icon { font-size:1.45rem; }
   .env-header { padding:0.55rem 0.8rem; }
   .location { font-size:1rem; }
@@ -844,6 +911,8 @@ button:focus-visible, input:focus-visible {
   .action-button { min-width:88px; font-size:0.65rem; padding:0 9px; }
   .interact-prompt { max-width:calc(100% - 24px); white-space:normal; text-align:center; bottom:66px; }
   .panel { padding:1.4rem; }
+  .conversation-panel { padding:0.5rem 0.8rem; }
+  .conversation-suggestion { font-size:0.62rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

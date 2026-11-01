@@ -10,7 +10,7 @@ const state = {
     messagesRead: 0, askedArtifact: false, askedKnight: false, askedDino: false,
     paintingSeen: false, deskSearched: false, doorOpened: false,
     clockOpened: false, sceneExamined: false, valeQuestioned: false,
-    annaQuestioned: false, cctvChecked: false, inStudy: false
+    annaQuestioned: false, cctvChecked: false, inStudy: false, portraitQuestioned: false
   },
   clues: [], turn: 0, levelComplete: false, requiredClues: 4
 };
@@ -26,11 +26,78 @@ let sunLight = null, ambientLight = null, fireLight = null;
 let smokeParticles = [], treeMeshes = [], footprintMeshes = [], peopleMeshes = [];
 let roomStudy = null, roomHall = null;
 let heldToolRig = null, equippedItemId = null;
+let conversationTarget = null;
 let interiorFixtures = [], interiorSwitchMesh = null, interiorLightsOn = false;
 let fireFlames = [], fireEmbers = [], waterRipples = [];
+let atmosphereFields = [];
 let mapContext = null, lastMapUpdate = 0;
 const interactionRaycaster = new THREE.Raycaster();
 const cameraTarget = new THREE.Vector3();
+const sdgRules = {
+  1: { label: "SDG 15 · LIFE ON LAND", rule: "Protect habitats and leave no trace." },
+  2: { label: "SDG 11 · SUSTAINABLE CITIES & COMMUNITIES", rule: "Respect cultural heritage; preserve every artifact." },
+  3: { label: "SDG 16 · PEACE, JUSTICE & STRONG INSTITUTIONS", rule: "Follow evidence, question assumptions, and seek a fair outcome." }
+};
+const characterChatbots = {
+  knight: {
+    name: "The Knight",
+    questions: ["What happened after closing?", "What did the stranger carry?", "What woke the exhibits?"],
+    answers: [
+      { match: /close|night|after|when|hour|11|time|stranger|figure|coat|case|carry|person/i, text: "After closing, a stranger in a long coat crossed the Egyptian wing with a hard case. He ignored every display and went straight for the service corridor." },
+      { match: /artifact|key|chamber|door|curator|below/i, text: "The curator argued that the original belonged in the sealed chamber below. The little brass key is the only way through that service door." },
+      { match: /dino|skeleton|pulse|sound|wok(?:e|en)?|machine|echo/i, text: "At 11:03, a pulse ran through every glass case. The dinosaur's bones rang like a tuning fork. That was machinery, not a ghost." },
+      { match: /project|echo|transfer|memory/i, text: "I heard the name Project Echo on the curator's recording. Whatever was being moved was a memory, not a museum object." }
+    ],
+    fallback: "I remember the long coat, the hard case, and the 11:03 pulse. Ask me about the service door, the exhibits, or Project Echo."
+  },
+  dinosaur: {
+    name: "The Dinosaur Skeleton",
+    questions: ["What was the pulse?", "Who woke you?", "What is Project Echo?"],
+    answers: [
+      { match: /pulse|11:03|sound|ring|vibrat|wake|machine/i, text: "11:03 PM. One low pulse, then a hum behind the wall. Every bone carried it. No storm makes a rhythm like that." },
+      { match: /who|person|stranger|figure|coat|knight/i, text: "A long shadow crossed the gallery after the pulse. It carried a case and stopped at the Egyptian display." },
+      { match: /project|echo|transfer|memory|subject/i, text: "The machines used the word 'transfer'. I am only the museum's sensor echo, repeating sounds recorded near the original subject." },
+      { match: /artifact|key|chamber|curator/i, text: "The curator hid a key for the chamber below. The note on the desk explains why the original subject must be found." }
+    ],
+    fallback: "I can replay what I sensed: a pulse at 11:03, a long-coated visitor, and the word 'transfer'. Which clue should I revisit?"
+  },
+  portrait: {
+    name: "The Blackwood Portrait",
+    questions: ["Why does the clock show 11:47?", "What changed in the inheritance?", "What do you know about the study?"],
+    answers: [
+      { match: /clock|11:47|time|hour/i, text: "The hands stopped at 11:47. That was the hour the Blackwood trust changed hands—and the minute someone moved me from my place above the stairs." },
+      { match: /inherit|trust|money|will|change/i, text: "The trust was rewritten in secret. Look for the clock's hidden note and the letter in the study; the portrait remembers only what it saw." },
+      { match: /study|letter|room|crime|weapon|body/i, text: "A figure in a long coat crossed the landing towards the study. I could not see a face. Anna was near the stairs, watching." },
+      { match: /anna|maid|housekeep/i, text: "Anna notices details people overlook. Ask her what she saw near 11:40, then compare her account with the CCTV." },
+      { match: /vale|doctor|adrian/i, text: "Dr. Vale said he was alone in the lab. The clock's note and the camera may tell you whether that story holds." }
+    ],
+    fallback: "I am a witness, not an oracle. Ask about the 11:47 clock, the Blackwood trust, the study, or the people in the hall."
+  },
+  vale: {
+    name: "Dr. Adrian Vale",
+    questions: ["Where were you at 11:40?", "What is Project Echo?", "Why should I trust you?"],
+    answers: [
+      { match: /alibi|where|lab|alone|11:30|11:40|time|clock/i, text: "I was in the lab from 10:30 until 11:30. I never entered the study. That is what I told the investigators." },
+      { match: /project|echo|transfer|memory|subject/i, text: "Project Echo was meant to preserve a person's memories. The transfer window was 11:30 to midnight. The original subject was never supposed to wake during it." },
+      { match: /anna|maid|witness|coat|figure|stranger|study/i, text: "Anna was in the hall that night. She insists she saw someone in a long coat near the study, but she never saw a face." },
+      { match: /proof|evidence|camera|cctv|footage|innocent/i, text: "Check the security terminal before you accuse anyone. A timeline is only useful when it is supported by evidence." },
+      { match: /trust|guilty|weapon|letter|why/i, text: "The letter and the clock know more than I do. If you have evidence, show me the timeline—not a guess." }
+    ],
+    fallback: "I can answer about my lab alibi, Project Echo, or the evidence. What would you like to ask?"
+  },
+  anna: {
+    name: "Anna, the Housekeeper",
+    questions: ["What did you see near the study?", "What time was it?", "Did you recognize the person?"],
+    answers: [
+      { match: /coat|figure|person|who|face|recogn|height|study|see|saw/i, text: "I saw a tall figure in a long coat near the study door. The face was hidden. I will not pretend I know who it was." },
+      { match: /time|when|11:40|clock|hour/i, text: "Around 11:40. The hall clock was still ticking then. It stopped later, at 11:47." },
+      { match: /vale|doctor|lab|alibi/i, text: "Dr. Vale said he was in the lab. I cannot confirm that. Please check the CCTV instead of relying on my memory." },
+      { match: /letter|weapon|print|evidence|proof|innocent/i, text: "The letter was on the desk, and the weapon looked clean. The camera recording should tell you who actually went into the study." },
+      { match: /project|echo|transfer|memory/i, text: "I heard Dr. Vale call it Project Echo. I only know what I overheard; the study records and terminal are your real evidence." }
+    ],
+    fallback: "I can tell you what I saw, and what I did not see. Ask about the long coat, the time, or the CCTV. I will not guess at someone's guilt."
+  }
+};
 const music = { context: null, master: null, timer: null, enabled: true, step: 0, level: 0, generation: 0, sources: new Map() };
 
 function initThree() {
@@ -498,7 +565,8 @@ function tryClimb() {
 function tryInteract() {
   if (!currentHover) return;
   const id = currentHover.userData.id;
-  setScene("Examining: " + (currentHover.userData.label || id));
+  const label = currentHover.userData.label || id;
+  setScene(characterChatbots[id] ? "Talking with: " + label : "Examining: " + label);
   advanceTime(2);
   if(id==="wallSwitch") { setInteriorLights(!interiorLightsOn); return; }
   if (state.level === 1) {
@@ -512,16 +580,14 @@ function tryInteract() {
     if (id==="artifact") talkArtifact();
     else if (id==="knight") talkKnight();
     else if (id==="dinosaur") talkDino();
-    else if (id==="painting") examinePainting();
+    else if (id==="painting") talkPortrait();
     else if (id==="door") examineDoor();
     else if (id==="desk") examineDesk();
     else if (id==="case") addMsg("ai","Glass case. Ancient tools and labels. Nothing moves by itself — only the big exhibits speak.");
   } else if (state.level === 3) {
     if (id==="galleryPortrait") {
       setScene("The portrait's brass plaque reads: 11:47 — the hour the Blackwood trust was changed.");
-      addMsg("ai","The portrait was moved recently. The dust outline shows that it once hid a small key hook.");
-      addClue("Portrait plaque links the manor clock to the inheritance change");
-      checkL3();
+      talkPortrait();
     } else if (id==="clock") examineClock();
     else if (id==="body"||id==="desk"||id==="letter"||id==="weapon") examineCrimeScene();
     else if (id==="vale") talkVale();
@@ -598,6 +664,49 @@ function tryLeaveL1() {
 }
 
 // ----- Level 2 -----
+function beginCharacterConversation(id, openingLine) {
+  const character = characterChatbots[id];
+  if (!character) return;
+  conversationTarget = id;
+  const input = document.getElementById("commandInput");
+  input.placeholder = `Ask ${character.name} about the case…`;
+  input.setAttribute("aria-label", `Ask ${character.name} a question`);
+  document.getElementById("conversationPanel").classList.add("active");
+  document.getElementById("conversationName").textContent = character.name;
+  const suggestions = document.getElementById("conversationSuggestions");
+  suggestions.replaceChildren();
+  character.questions.forEach(question => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "conversation-suggestion";
+    button.textContent = question;
+    button.addEventListener("click", () => askCharacterPrompt(question));
+    suggestions.appendChild(button);
+  });
+  addMsg("character", openingLine, character.name);
+  input.focus();
+}
+function endConversation() {
+  conversationTarget = null;
+  document.getElementById("conversationPanel").classList.remove("active");
+  document.getElementById("conversationSuggestions").replaceChildren();
+  const input = document.getElementById("commandInput");
+  input.placeholder = "Ask questions, give orders, investigate…";
+  input.setAttribute("aria-label", "Enter a command");
+  input.focus();
+}
+function answerCharacterQuestion(question) {
+  const character = characterChatbots[conversationTarget];
+  const answer = character.answers.find(entry => entry.match.test(question));
+  addMsg("character", answer ? answer.text : character.fallback, character.name);
+}
+function askCharacterPrompt(question) {
+  if (!conversationTarget || state.levelComplete) return;
+  addMsg("player", question);
+  state.turn++;
+  advanceTime(1);
+  answerCharacterQuestion(question);
+}
 function talkArtifact() {
   state.memory.askedArtifact = true; state.info += 12;
   if (state.memory.foundObject) {
@@ -607,16 +716,35 @@ function talkArtifact() {
   checkL2(); updateUI();
 }
 function talkKnight() {
-  state.memory.askedKnight = true; state.info += 12;
-  addMsg("character","Long coat. Hard case. After closing. Egyptian wing. Did not bow.","⚔️ Medieval Knight");
+  if (!state.memory.askedKnight) state.info += 12;
+  state.memory.askedKnight = true;
+  beginCharacterConversation("knight","I saw a stranger cross the gallery after closing. Long coat. Hard case. No respect for the exhibits.");
   addClue("Long-coat figure after hours with case → Egyptian wing");
   checkL2(); updateUI();
 }
 function talkDino() {
-  state.memory.askedDino = true; state.info += 14;
-  addMsg("character","Pulse at 11:03. Every bone rang. A machine, not weather.","🦖 Dinosaur Skeleton");
+  if (!state.memory.askedDino) state.info += 14;
+  state.memory.askedDino = true;
+  beginCharacterConversation("dinosaur","At 11:03, a pulse ran through my bones. I am a museum sensor echo, not a living dinosaur—but I remember the sound.");
   addClue("EM pulse 11:03 PM woke the exhibits");
   checkL2(); updateUI();
+}
+function talkPortrait() {
+  if (!state.memory.portraitQuestioned) state.info += 12;
+  state.memory.portraitQuestioned = true;
+  const inManor = state.level === 3;
+  setScene(inManor
+    ? "The portrait's brass plaque reads 11:47 — the hour the Blackwood trust was changed."
+    : "A portrait's brass plaque reads 11:47 — the hour the Blackwood trust changed.");
+  beginCharacterConversation("portrait",inManor
+    ? "The hall clock stopped at 11:47. I was moved from my place above the stairs, and I saw a long-coated figure heading toward the study."
+    : "The hall clock stopped at 11:47. I remember a long-coated visitor and the hidden story behind the Blackwood trust.");
+  addClue("Portrait witness places a long-coated figure near the study");
+  if (inManor) {
+    addClue("Portrait plaque links the manor clock to the inheritance change");
+    checkL3();
+  } else checkL2();
+  updateUI();
 }
 function examinePainting() {
   state.memory.paintingSeen = true; state.info += 12;
@@ -688,15 +816,17 @@ function examineCrimeScene() {
   checkL3(); updateUI();
 }
 function talkVale() {
-  state.memory.valeQuestioned = true; state.info += 12;
-  addMsg("character","Lab 10:30–11:30. Alone. Never entered the study.","Dr. Adrian Vale");
-  addMsg("system","Left hand trembles.");
+  if (!state.memory.valeQuestioned) state.info += 12;
+  state.memory.valeQuestioned = true;
+  beginCharacterConversation("vale","I was in the lab from 10:30 to 11:30. I never entered the study. If you doubt me, check the records.");
+  addMsg("system","Vale's left hand trembles.");
   addClue("Vale: lab alibi; hand trembles");
   checkL3(); updateUI();
 }
 function talkAnna() {
-  state.memory.annaQuestioned = true; state.info += 12;
-  addMsg("character","Around 11:40 — long coat near the study. Height like yours. No face.","Anna");
+  if (!state.memory.annaQuestioned) state.info += 12;
+  state.memory.annaQuestioned = true;
+  beginCharacterConversation("anna","Around 11:40, I saw a tall figure in a long coat near the study. I could not see a face, so I will not tell you who it was.");
   addClue("Anna: long-coat at study ~11:40");
   checkL3(); updateUI();
 }
@@ -742,6 +872,7 @@ function clearWorld() {
   }
   worldGroup = new THREE.Group(); scene.add(worldGroup);
   interactables = []; grabbables = []; smokeParticles = []; treeMeshes = []; footprintMeshes = []; peopleMeshes = [];
+  atmosphereFields=[];
   fireFlames=[]; fireEmbers=[]; waterRipples=[]; interiorFixtures=[]; interiorSwitchMesh=null;
   interiorLightsOn=false; hillMesh = null; fireLight = null; roomStudy = null; roomHall = null; heldObject = null;
   clearHeldTool();
@@ -775,6 +906,34 @@ function addInteriorFixture(light,intensity,bulb=null) {
   light.intensity=0;
   scene.add(light);
   interiorFixtures.push({light,intensity,bulb});
+}
+function addAtmosphereField(count,color,width,depth,height,opacity) {
+  const mesh = new THREE.InstancedMesh(
+    new THREE.SphereGeometry(0.025,6,6),
+    new THREE.MeshBasicMaterial({color,transparent:true,opacity,depthWrite:false}),
+    count
+  );
+  mesh.frustumCulled=false;
+  const particles = [];
+  const transform = new THREE.Object3D();
+  for(let i=0;i<count;i++) {
+    const particle = {
+      x:(Math.random()-0.5)*width,
+      y:0.4+Math.random()*height,
+      z:(Math.random()-0.5)*depth,
+      speed:0.08+Math.random()*0.13,
+      scale:0.55+Math.random()*0.8,
+      phase:Math.random()*Math.PI*2
+    };
+    particles.push(particle);
+    transform.position.set(particle.x,particle.y,particle.z);
+    transform.scale.setScalar(particle.scale);
+    transform.updateMatrix();
+    mesh.setMatrixAt(i,transform.matrix);
+  }
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  worldGroup.add(mesh);
+  atmosphereFields.push({mesh,particles,width,depth,height,transform});
 }
 function createWallSwitch(x,z,label,parent=worldGroup,rotationY=Math.PI) {
   const device=new THREE.Group();
@@ -1347,6 +1506,7 @@ function buildLevel2() {
   const redLight = new THREE.PointLight(0xd75a37, 1.4, 16);
   redLight.position.set(0,3,-11); addInteriorFixture(redLight,1.4);
   scene.fog = new THREE.Fog(0x0c0a08, 10, 32);
+  addAtmosphereField(54,0xe5c78b,26,26,7.2,0.3);
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(32,32),
@@ -1576,6 +1736,8 @@ function buildLevel3() {
   const windowLight = new THREE.PointLight(0x6d8ab8,2,18,1.5);
   windowLight.position.set(-7,3,3); addInteriorFixture(windowLight,2);
   scene.fog = new THREE.Fog(0x080b12,11,34);
+  addAtmosphereField(38,0xa9c4df,19,17,4.8,0.24);
+  addAtmosphereField(22,0xe2a878,19,17,3.8,0.22);
 
   // HALL group
   roomHall = new THREE.Group(); worldGroup.add(roomHall);
@@ -1877,8 +2039,10 @@ function checkHover() {
     }
     hoverOutline.visible=true;
     hoverOutline.update();
+    const isCharacter=Boolean(characterChatbots[target.userData.id]);
     const g = target.userData.id==="wallSwitch" ? " · click to switch"
-      : target.userData.grabbable ? " · E to pick up" : " · click to inspect";
+      : target.userData.grabbable ? " · E to pick up" : isCharacter ? " · click to talk"
+      : " · click to inspect";
     prompt.textContent = (target.userData.label||target.userData.id) + g;
     prompt.classList.add("show"); cross.classList.add("active");
     updateActionButton();
@@ -1894,7 +2058,8 @@ function updateActionButton() {
   actionButton.textContent=equippedItemId&&["food","water","meds"].includes(equippedItemId)
     ? "USE "+equippedItemId.toUpperCase()
     : heldObject?"DROP":currentHover&&currentHover.userData.id==="wallSwitch"?"SWITCH"
-    :currentHover&&currentHover.userData.grabbable?"PICK UP":"INSPECT";
+    :currentHover&&currentHover.userData.grabbable?"PICK UP"
+    :currentHover&&characterChatbots[currentHover.userData.id]?"TALK":"INSPECT";
 }
 function updateMiniMap(now) {
   const canvas=document.getElementById("miniMap");
@@ -1978,6 +2143,22 @@ function animate() {
       const pulse=0.78+Math.sin(t*1.5+ripple.userData.phase)*0.17;
       ripple.scale.setScalar(pulse); ripple.material.opacity=0.2+0.14*pulse;
     });
+    atmosphereFields.forEach(field=>{
+      field.particles.forEach((particle,index)=>{
+        particle.y+=particle.speed*dt;
+        particle.x+=Math.sin(t*0.55+particle.phase)*dt*0.12;
+        if(particle.y>field.height+0.4) {
+          particle.y=0.35;
+          particle.x=(Math.random()-0.5)*field.width;
+          particle.z=(Math.random()-0.5)*field.depth;
+        }
+        field.transform.position.set(particle.x,particle.y,particle.z);
+        field.transform.scale.setScalar(particle.scale);
+        field.transform.updateMatrix();
+        field.mesh.setMatrixAt(index,field.transform.matrix);
+      });
+      field.mesh.instanceMatrix.needsUpdate=true;
+    });
     if (worldGroup) worldGroup.children.forEach(c => {
       if (c.userData.bob) c.position.y = c.userData.baseY + Math.sin(t*1.5+c.userData.bob)*0.05;
     });
@@ -2035,6 +2216,9 @@ function updateUI() {
   document.getElementById("safety").textContent = Math.round(state.safety)+"%";
   document.getElementById("info").textContent = Math.round(state.info)+"%";
   document.getElementById("levelBadge").textContent = state.level===1?"LEVEL 1 — THE UNKNOWN":state.level===2?"LEVEL 2 — MUSEUM AFTER DARK":"LEVEL 3 — THE FINAL CASE";
+  const sdgRule = sdgRules[state.level];
+  document.getElementById("sdgRuleLabel").textContent = sdgRule.label;
+  document.getElementById("sdgRuleText").textContent = sdgRule.rule;
   document.getElementById("inventory").innerHTML = state.inventory.map(i=>{
     const hl=/key|journal|flashlight/i.test(i.id)?" highlight":"";
     const selected=equippedItemId===i.id?" selected":"";
@@ -2068,6 +2252,7 @@ function addMsg(type,text,name){
 }
 
 function resetLevel(lvl) {
+  if (conversationTarget) endConversation();
   state.level=lvl; state.turn=0; state.levelComplete=false; state.clues=[];
   state.memory.flashlightOn=false;
   if(flashlight) flashlight.intensity=0;
@@ -2088,7 +2273,7 @@ function resetLevel(lvl) {
     addMsg("system","You wake with almost no memory.");
     addMsg("warning",'"Don\'t follow the smoke."');
   } else if (lvl===2) {
-    Object.assign(state.memory,{askedArtifact:false,askedKnight:false,askedDino:false,paintingSeen:false,deskSearched:false,doorOpened:false});
+    Object.assign(state.memory,{askedArtifact:false,askedKnight:false,askedDino:false,portraitQuestioned:false,paintingSeen:false,deskSearched:false,doorOpened:false});
     buildLevel2();
     state.health=95;state.food=3;state.water=3;state.safety=70;state.info=25;
     state.location="Museum — Egyptian Wing";
@@ -2098,7 +2283,7 @@ function resetLevel(lvl) {
     setScene("Find the brass wall switch to light the museum, then inspect the exhibits.");
     addMsg("system","Doors sealed. Exhibits are conscious.");
   } else {
-    Object.assign(state.memory,{clockOpened:false,sceneExamined:false,valeQuestioned:false,annaQuestioned:false,cctvChecked:false,inStudy:false});
+    Object.assign(state.memory,{clockOpened:false,sceneExamined:false,valeQuestioned:false,annaQuestioned:false,cctvChecked:false,inStudy:false,portraitQuestioned:false});
     buildLevel3();
     state.health=100;state.food=3;state.water=3;state.safety=45;state.info=20;
     state.location="Blackwood Manor — Grand Hall";
@@ -2117,6 +2302,7 @@ function sendCommand() {
   input.value=""; addMsg("player",text); state.turn++; advanceTime(1);
   const c=text.toLowerCase();
   if (/^(help|commands|what can i do|what should i do)\??$/.test(c)) { showCommandHelp(); return; }
+  if (conversationTarget) { answerCharacterQuestion(text); return; }
   if(/flashlight|torch|^f$|light on/.test(c)){toggleFlashlight();return;}
   if(/climb/.test(c)){tryClimb();return;}
   if(/grab|pick up|drop|put down/.test(c)){toggleGrab();return;}
@@ -2139,7 +2325,7 @@ function sendCommand() {
     if(/artifact|egyptian|statue/.test(c)){talkArtifact();return;}
     if(/knight|armor|figure/.test(c)){talkKnight();return;}
     if(/dino|skeleton|pulse/.test(c)){talkDino();return;}
-    if(/painting/.test(c)){examinePainting();return;}
+    if(/painting|portrait/.test(c)){talkPortrait();return;}
     if(/desk|curator|note/.test(c)){examineDesk();return;}
     if(/door|chamber|key|open/.test(c)){examineDoor();return;}
     addMsg("ai","I didn't recognize that action. Type 'help' to see commands for this level.");

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ECHOES — An AI Interactive Mystery World</title>
+  <title>ECHOES — An Interactive Mystery Adventure</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -15,16 +15,16 @@
     <div class="home-content">
       <div class="logo">ECHOES</div>
       <p class="tagline">Every decision leaves a trace.</p>
-      <p class="sub-tagline">An AI-powered interactive mystery where the world reacts to what you say.</p>
+      <p class="sub-tagline">A reactive mystery world where every clue, conversation, and choice matters.</p>
       <div class="home-buttons">
         <button class="btn primary" onclick="startJourney()">START JOURNEY</button>
         <button class="btn secondary" onclick="showMultiplayer()">PLAY WITH FRIENDS</button>
         <button class="btn ghost" onclick="showHowTo()">HOW TO PLAY</button>
       </div>
       <div class="levels-preview">
-        <div class="level-card"><span class="level-icon">🌲</span><h3>LEVEL 1</h3><p>The Unknown</p><span class="stars">★★☆☆☆</span></div>
-        <div class="level-card"><span class="level-icon">🏛️</span><h3>LEVEL 2</h3><p>Museum After Dark</p><span class="stars">★★★★☆</span></div>
-        <div class="level-card"><span class="level-icon">🕵️</span><h3>LEVEL 3</h3><p>The Final Case</p><span class="stars">★★★★★</span></div>
+        <div class="level-card"><span class="level-icon">🌲</span><h3>LEVEL 1</h3><p>The Unknown</p><span class="sdg-card-tag">SDG 15 · LIFE ON LAND</span><span class="stars">★★☆☆☆</span></div>
+        <div class="level-card"><span class="level-icon">🏛️</span><h3>LEVEL 2</h3><p>Museum After Dark</p><span class="sdg-card-tag">SDG 11 · CULTURAL HERITAGE</span><span class="stars">★★★★☆</span></div>
+        <div class="level-card"><span class="level-icon">🕵️</span><h3>LEVEL 3</h3><p>The Final Case</p><span class="sdg-card-tag">SDG 16 · PEACE & JUSTICE</span><span class="stars">★★★★★</span></div>
       </div>
     </div>
   </section>
@@ -47,8 +47,8 @@
           <p>Click food, water, or medical supplies to hold them, then press <b>E</b> to use. Find the wall switches; use the map and level music controls.</p>
         </div>
         <div class="howto-card">
-          <h3>4. Ask Anything</h3>
-          <p>Search for clues, question characters, climb the manor stairs, and connect the evidence to move the story forward.</p>
+          <h3>4. Talk &amp; Ask</h3>
+          <p>When a character is in view, click to talk. Ask your own question or pick a suggested prompt, then end the chat when you are ready to investigate again.</p>
         </div>
       </div>
       <div class="core-mechanic">
@@ -120,11 +120,18 @@
       </div>
       <div class="ai-panel">
         <div class="ai-header">
-          <span class="level-badge" id="levelBadge">LEVEL 1 — THE UNKNOWN</span>
+          <div class="header-labels">
+            <span class="level-badge" id="levelBadge">LEVEL 1 — THE UNKNOWN</span>
+            <span class="sdg-rule"><strong id="sdgRuleLabel">SDG 15 · LIFE ON LAND</strong><span id="sdgRuleText">Protect habitats and leave no trace.</span></span>
+          </div>
           <button class="menu-btn" onclick="toggleMenu()">☰</button>
         </div>
         <div class="objectives"><h4>OBJECTIVES</h4><ul id="objectivesList"></ul></div>
         <div class="inventory"><h4>INVENTORY</h4><div class="inv-grid" id="inventory"></div></div>
+        <div class="conversation-panel" id="conversationPanel" aria-live="polite">
+          <div class="conversation-heading"><div><span class="conversation-kicker">LOCAL STORY CHAT · NO INTERNET NEEDED</span><strong id="conversationName">Character</strong></div><button type="button" class="end-conversation" onclick="endConversation()" aria-label="End conversation">END CHAT</button></div>
+          <div class="conversation-suggestions" id="conversationSuggestions"></div>
+        </div>
         <div class="chat-log" id="chatLog"></div>
         <div class="command-area">
           <input type="text" id="commandInput" placeholder="Ask questions, give orders, investigate…" autocomplete="off" aria-label="Enter a command" />
