@@ -269,13 +269,15 @@ body {
   min-height: 620px;
   max-height: 100dvh;
 }
-.game-layout.phone-powered-off {
+.game-layout.phone-powered-off,
+.game-layout.phone-in-use {
   grid-template-columns:minmax(0,1fr);
   grid-template-rows:minmax(0,1fr);
   height:100dvh;
   min-height:100dvh;
 }
-.game-layout.phone-powered-off .ai-panel { display:none; }
+.game-layout.phone-powered-off .ai-panel,
+.game-layout.phone-in-use .ai-panel { display:none; }
 
 .env-panel {
   background: linear-gradient(180deg, #101718, #090e0f);

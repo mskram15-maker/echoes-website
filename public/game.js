@@ -21,6 +21,7 @@ const state = {
 
 let scene, camera, renderer, clockSys;
 let player = { x: 0, y: 1.6, z: 10, yaw: 0, pitch: 0, onGround: true };
+let playerVelocity = null;
 let keys = {}, isLooking = false, lastMouse = { x: 0, y: 0 };
 let activePointerId = null, pointerStart = { x: 0, y: 0 }, pointerMoved = false;
 let interactables = [], grabbables = [], currentHover = null, heldObject = null;
@@ -303,46 +304,45 @@ function buildGripHand(rig,options={}) {
   cuff.position.set(-0.012,-0.065,-0.03);
   hand.add(cuff);
   const palm=new THREE.Mesh(new THREE.SphereGeometry(0.105,24,18),glove);
-  palm.scale.set(1.02,1.28,0.62);
-  palm.position.set(0.018,0.005,-0.145);
+  palm.scale.set(1.22,1.12,0.72);
+  palm.position.set(0.005,0.015,-0.145);
   palm.castShadow=true;
   hand.add(palm);
 
-  const heel=new THREE.Mesh(new THREE.SphereGeometry(0.071,16,12),glove);
-  heel.scale.set(0.86,0.78,0.62);
-  heel.position.set(-0.005,-0.075,-0.095);
-  heel.castShadow=true;
-  hand.add(heel);
-  const fingerOffsets=[-0.065,-0.025,0.019,0.06];
-  fingerOffsets.forEach((offset,index)=>{
-    const width=[0.021,0.023,0.022,0.019][index];
-    const start=new THREE.Vector3(offset,0.045,-0.205);
-    const knuckle=new THREE.Vector3(offset+0.002,-0.015,-0.253);
-    const middle=new THREE.Vector3(offset+0.006,-0.078,-0.286);
-    const tip=new THREE.Vector3(offset+0.012,-0.122,-0.245);
-    addHandSegment(hand,start,knuckle,width,width*0.91,glove);
-    addHandSegment(hand,knuckle,middle,width*0.91,width*0.78,glove);
-    addHandSegment(hand,middle,tip,width*0.78,width*0.62,glove);
-    for(const [jointPosition,radius] of [[knuckle,width*0.9],[middle,width*0.76]]) {
-      const joint=new THREE.Mesh(new THREE.SphereGeometry(radius,12,10),glove);
+  const fingerRows=[
+    {x:-0.073,width:0.021,length:0.17},
+    {x:-0.025,width:0.023,length:0.2},
+    {x:0.025,width:0.021,length:0.19},
+    {x:0.07,width:0.018,length:0.16}
+  ];
+  fingerRows.forEach(({x,width,length},index)=>{
+    const root=new THREE.Vector3(x,0.052,-0.205);
+    const firstJoint=new THREE.Vector3(x+0.004,-0.005,-0.247);
+    const secondJoint=new THREE.Vector3(x+0.008,-0.035,-0.205-length*0.62);
+    const tip=new THREE.Vector3(x+0.012,-0.078,-0.195-length*0.62);
+    const joints=[root,firstJoint,secondJoint,tip];
+    for(let segment=0;segment<3;segment++) {
+      const taper=segment===0?1:segment===1?0.86:0.7;
+      addHandSegment(hand,joints[segment],joints[segment+1],width*taper,width*taper*0.88,glove);
+    }
+    for(const [jointPosition,radius] of [[firstJoint,width*0.82],[secondJoint,width*0.7]]) {
+      const joint=new THREE.Mesh(new THREE.SphereGeometry(radius,14,10),glove);
       joint.position.copy(jointPosition);
       joint.castShadow=true;
       hand.add(joint);
     }
   });
-  const thumbStart=new THREE.Vector3(0.09,0.015,-0.15);
-  const thumbBase=new THREE.Vector3(0.137,-0.025,-0.2);
-  const thumbJoint=new THREE.Vector3(0.15,-0.075,-0.25);
-  const thumbTip=new THREE.Vector3(0.105,-0.108,-0.247);
+  const thumbStart=new THREE.Vector3(0.09,0.015,-0.145);
+  const thumbBase=new THREE.Vector3(0.133,-0.005,-0.19);
+  const thumbJoint=new THREE.Vector3(0.132,-0.04,-0.235);
+  const thumbTip=new THREE.Vector3(0.086,-0.06,-0.25);
   addHandSegment(hand,thumbStart,thumbBase,0.03,0.027,glove);
-  addHandSegment(hand,thumbBase,thumbJoint,0.027,0.022,glove);
-  addHandSegment(hand,thumbJoint,thumbTip,0.022,0.017,glove);
-  for(const [jointPosition,radius] of [[thumbBase,0.027],[thumbJoint,0.021]]) {
-    const joint=new THREE.Mesh(new THREE.SphereGeometry(radius,12,10),glove);
-    joint.position.copy(jointPosition);
-    joint.castShadow=true;
-    hand.add(joint);
-  }
+  addHandSegment(hand,thumbBase,thumbJoint,0.027,0.023,glove);
+  addHandSegment(hand,thumbJoint,thumbTip,0.023,0.018,glove);
+  const thumbPad=new THREE.Mesh(new THREE.SphereGeometry(0.027,14,10),glove);
+  thumbPad.position.copy(thumbJoint);
+  thumbPad.castShadow=true;
+  hand.add(thumbPad);
   const cuffSeam=new THREE.Mesh(new THREE.TorusGeometry(0.085,0.006,6,20),
     new THREE.MeshStandardMaterial({color:0x879087,roughness:0.85}));
   cuffSeam.position.set(-0.012,-0.065,-0.03);
@@ -714,10 +714,10 @@ function equipHeldItem(id) {
     grip.rotation.x=-Math.PI/2;grip.position.set(0.04,0.08,-0.04);heldToolRig.add(grip);
   } else if(id==="spray") {
     const can=new THREE.Mesh(new THREE.CylinderGeometry(0.095,0.105,0.34,18),
-      new THREE.MeshStandardMaterial({color:0xbfcbd0,metalness:0.22,roughness:0.34}));
+      new THREE.MeshStandardMaterial({color:state.level===3?0x8db0b4:0xbfcbd0,metalness:0.22,roughness:0.34}));
     can.rotation.x=-Math.PI/2;can.position.set(0.04,0.07,-0.27);heldToolRig.add(can);
     const label=new THREE.Mesh(new THREE.CylinderGeometry(0.098,0.106,0.17,18,1,true),
-      new THREE.MeshStandardMaterial({color:0xe9e5d7,roughness:0.75,side:THREE.DoubleSide}));
+      new THREE.MeshStandardMaterial({color:state.level===3?0xdbe7dc:0xe9e5d7,roughness:0.75,side:THREE.DoubleSide}));
     label.rotation.x=-Math.PI/2;label.position.set(0.04,0.07,-0.27);heldToolRig.add(label);
     const nozzle=new THREE.Mesh(new THREE.CylinderGeometry(0.027,0.032,0.09,12),
       new THREE.MeshStandardMaterial({color:0x71868b,metalness:0.62,roughness:0.3}));
@@ -851,7 +851,9 @@ function useEquippedItem() {
   } else if(equippedItemId==="spray") {
     if(!encounterState.active||encounterState.cleared||
       ![2,3].includes(state.level)||!encounterState.threat) {
-      addMsg("system","Keep the salt-mist can ready for the museum ghosts or the manor intruder.");
+      addMsg("system",state.level===2
+        ?"Keep the salt-mist can ready for the museum ghosts."
+        :"Keep the restraint-foam can ready for the manor intruder.");
       return true;
     }
     const dx=encounterState.threat.position.x-player.x;
@@ -867,8 +869,10 @@ function useEquippedItem() {
     encounterState.frozenUntil=performance.now()/1000+4.5;
     encounterState.progress=Math.max(0,encounterState.progress);
     if(encounterState.freezeEffect) encounterState.freezeEffect.visible=true;
-    setEncounterHint("FROZEN · Move while the salt mist holds it still");
-    addMsg("system",`You spray the ${state.level===2?"ghost":"intruder"} with salt mist. It freezes in place for a few seconds—use the opening to move.`);
+    setEncounterHint(state.level===2?"FROZEN · Move while the salt mist holds it still":"PINNED · Move while the restraint foam holds");
+    addMsg("system",state.level===2
+      ?"Salt mist catches the ghost in a cold haze for a few seconds—use the opening to move."
+      :"Restraint foam briefly pins the intruder in place without injury—use the opening to reach the hall.");
   } else if (equippedItemId==="food") {
     item.uses--; state.food=Math.max(0,state.food-0.4);
     state.health=Math.min(100,state.health+8); advanceTime(5);
@@ -1182,7 +1186,6 @@ function showPhoneHome() {
 }
 function openFieldPhone() {
   phonePoweredOn=true;
-  document.querySelector(".game-layout")?.classList.remove("phone-powered-off");
   const overlay=document.getElementById("phoneChatOverlay");
   if(overlay.hidden) previousHeldItem=equippedItemId==="phone"?previousHeldItem:equippedItemId;
   conversationTarget=null;
@@ -1190,9 +1193,17 @@ function openFieldPhone() {
   if(state.inventory.some(item=>item.id==="phone")) equipHeldItem("phone");
   else phoneRig.visible=true;
   overlay.hidden=false;
+  syncPhoneLayout();
   showPhoneHome();
   updateUI();
   document.getElementById("gameCanvas").blur();
+}
+function syncPhoneLayout() {
+  const layout=document.querySelector(".game-layout");
+  const overlay=document.getElementById("phoneChatOverlay");
+  if(!layout||!overlay) return;
+  layout.classList.toggle("phone-powered-off",!phonePoweredOn);
+  layout.classList.toggle("phone-in-use",phonePoweredOn&&!overlay.hidden);
 }
 function toggleFieldPhone() {
   const overlay=document.getElementById("phoneChatOverlay");
@@ -1208,7 +1219,6 @@ function toggleFieldPhone() {
   else togglePhonePower();
 }
 function togglePhonePower() {
-  const layout=document.querySelector(".game-layout");
   if(phonePoweredOn) {
     phonePoweredOn=false;
     conversationTarget=null;
@@ -1219,13 +1229,12 @@ function togglePhonePower() {
     document.getElementById("phoneTyping").hidden=true;
     phoneRigOpen=true;
     if(phoneRig) phoneRig.visible=true;
-    if(layout) layout.classList.add("phone-powered-off");
+    syncPhoneLayout();
     drawPhoneScreen();
     addMsg("system","Field phone powered off. Its screen is dark.");
     document.getElementById("gameCanvas").focus();
   } else {
     phonePoweredOn=true;
-    if(layout) layout.classList.remove("phone-powered-off");
     openFieldPhone();
     addMsg("system","Field phone powered on.");
   }
@@ -1415,7 +1424,6 @@ function beginCharacterConversation(id, openingLine) {
   const character=characterChatbots[id];
   if (!character) return;
   phonePoweredOn=true;
-  document.querySelector(".game-layout")?.classList.remove("phone-powered-off");
   if (conversationTarget&&conversationTarget!==id) endConversation();
   conversationTarget=id;
   phoneRigOpen=true;
@@ -1441,6 +1449,7 @@ function beginCharacterConversation(id, openingLine) {
   });
   renderPhoneThread(id);
   document.getElementById("phoneChatOverlay").hidden=false;
+  syncPhoneLayout();
   document.getElementById("phoneHomeView").hidden=true;
   document.getElementById("phoneAppView").hidden=true;
   document.getElementById("phoneConversationView").hidden=false;
@@ -1458,6 +1467,7 @@ function endConversation() {
   phoneRigOpen=false;
   if (phoneRig) phoneRig.visible=false;
   overlay.hidden=true;
+  syncPhoneLayout();
   document.getElementById("phoneHomeView").hidden=false;
   document.getElementById("phoneAppView").hidden=true;
   document.getElementById("phoneConversationView").hidden=true;
@@ -1768,7 +1778,7 @@ function proveInnocence() {
     return;
   }
   if(encounterState.active&&!encounterState.cleared) {
-    addMsg("warning","Reach the hall safely before presenting your case. Distract the intruder with a flare or freeze them with salt mist, vault the overturned table, and use the study door.");
+    addMsg("warning","Reach the hall safely before presenting your case. Distract the intruder with a flare or pin them briefly with restraint foam, vault the overturned table, and use the study door.");
     return;
   }
   addMsg("ai","You present the full timeline. Planted key. Camera alibi. Vale breaks.");
@@ -1798,6 +1808,7 @@ function clearWorld() {
   interiorLightsOn=false; hillMesh = null; fireLight = null; roomStudy = null; roomHall = null; heldObject = null;
   encounterState={level:0,threat:null,active:false,cleared:false,progress:0,distractedUntil:0,frozenUntil:0,freezeEffect:null,failed:false,studyObstacleVaulted:false};
   vaultObstacles=[];vaultJumpTimer=0;
+  playerVelocity=new THREE.Vector3();
   clearHeldTool();
   const rm = []; scene.traverse(o => { if (o.isLight && o !== flashlight) rm.push(o); });
   rm.forEach(l => scene.remove(l));
@@ -2047,6 +2058,36 @@ function createEncounterThreat(level,parent=worldGroup,variant=0) {
     }
     const mouth=ellipsoid(0.11,0.035,0.025,0x241d1d,0.98,socketMaterial);
     mouth.position.set(0,1.99,-0.405);group.add(mouth);
+    const jaw=ellipsoid(0.2,0.09,0.07,0x77736c,0.94,skinMaterial);
+    jaw.position.set(0,1.91,-0.28);group.add(jaw);
+    for(let tooth=0;tooth<5;tooth++) {
+      const fang=new THREE.Mesh(new THREE.ConeGeometry(0.018,0.075,5),
+        new THREE.MeshBasicMaterial({color:0xc9d9cf,transparent:true,opacity:0.86}));
+      fang.position.set(-0.075+tooth*0.037,1.95,-0.35);
+      fang.rotation.z=Math.PI;group.add(fang);
+    }
+    const crackMaterial=new THREE.MeshBasicMaterial({color:0x101719,transparent:true,opacity:0.86});
+    [
+      [[-0.18,2.37,-0.33],[-0.1,2.28,-0.38]],
+      [[-0.1,2.28,-0.38],[-0.16,2.2,-0.39]],
+      [[0.17,2.31,-0.34],[0.12,2.22,-0.39]],
+      [[0.12,2.22,-0.39],[0.2,2.12,-0.37]]
+    ].forEach(([start,end])=>boneLink(group,start,end,0.009,crackMaterial));
+    const spectralMaterial=new THREE.MeshBasicMaterial({
+      color:variant===0?0x79c6d3:0xa69abb,transparent:true,opacity:0.34,depthWrite:false
+    });
+    for(let tendril=0;tendril<3;tendril++) {
+      const side=tendril-1;
+      const curve=new THREE.CatmullRomCurve3([
+        new THREE.Vector3(side*0.42,0.58,0.06),
+        new THREE.Vector3(side*0.68,0.24,0.02),
+        new THREE.Vector3(side*0.78,-0.12,0.16),
+        new THREE.Vector3(side*0.55,-0.48,0.28)
+      ]);
+      group.add(new THREE.Mesh(new THREE.TubeGeometry(curve,16,0.025,5,false),spectralMaterial));
+    }
+    const ghostGlow=new THREE.PointLight(variant===0?0x59d0dc:0x9480c5,0.55,4.2,2);
+    ghostGlow.position.set(0,1.65,0.36);group.add(ghostGlow);
     for(let i=0;i<5;i++) {
       const tatter=new THREE.Mesh(new THREE.ConeGeometry(0.11,0.58+(i%2)*0.2,6),
         robeMaterial);
@@ -2134,7 +2175,7 @@ function clearEncounter(message) {
     const progress=document.getElementById("encounterProgress");
     if(title) title.textContent=encounterState.name.toUpperCase();
     if(progress) progress.style.width="0%";
-    setEncounterHint("A second presence has emerged. Keep the UV beam trained on it or use another ward.");
+    setEncounterHint("A second presence has emerged. Aim the flashlight or use another repeller.");
     if(message) addMsg("system",message);
     addMsg("warning","The first wraith dissolves into the dark. A second ghost rises behind you—the Mourning Curator is faster and closing in.");
     checkL2();
@@ -2195,7 +2236,7 @@ function updateEncounter(dt,time) {
     return;
   }
   if(frozen) {
-    setEncounterHint("FROZEN · Move while the salt mist holds it still");
+    setEncounterHint(state.level===2?"FROZEN · Move while the salt mist holds it still":"PINNED · Move while the restraint foam holds");
   } else if(beamHit) {
     const repelTime=state.level===1?2.3:state.level===2&&encounterState.phase===1?4.1:3.2;
     encounterState.progress=Math.min(1,encounterState.progress+dt/repelTime);
@@ -3007,6 +3048,8 @@ function buildLevel2() {
   }
   const skull = ellipsoid(0.72,0.43,0.48,0xb5a27e,0.78,bone);
   skull.position.set(2.1,2.42,-11); dinosaur.add(skull);
+  const brow=boneLink(dinosaur,[1.72,2.62,-11.2],[2.32,2.66,-11.18],0.045,bone,0.035);
+  brow.rotation.z=-0.04;
   const snout=ellipsoid(0.5,0.23,0.38,0xa49170,0.78,bone);
   snout.position.set(2.55,2.26,-10.78); dinosaur.add(snout);
   const jaw = box(0.9,0.14,0.65,0x8e7c61,2.35,2.03,-11.05); dinosaur.add(jaw);
@@ -3018,15 +3061,21 @@ function buildLevel2() {
   }
   const eyeSocketMaterial = new THREE.MeshStandardMaterial({color:0x171715,roughness:0.75});
   for (const side of [-1,1]) {
-    for(let ribIndex=0;ribIndex<5;ribIndex++) {
-      const rib = new THREE.Mesh(new THREE.TorusGeometry(0.47,0.045,7,16,Math.PI),bone);
-      rib.position.set(-0.82+ribIndex*0.33,2.05,-11+side*0.1);
-      rib.rotation.z=Math.PI; rib.scale.set(0.86,1.06,0.75); dinosaur.add(rib);
-    }
     const eye = ellipsoid(0.09,0.085,0.055,0x17202b,0.75,eyeSocketMaterial);
     eye.position.set(2.19+side*0.2,2.53,-10.56); dinosaur.add(eye);
     boneLink(dinosaur,[1.55,2.13,-11+side*0.12],[1.94,1.8,-11+side*0.22],0.07,bone,0.06);
+    boneLink(dinosaur,[-1.03,1.94,-11],[ -0.78,1.72,-11+side*0.43],0.075,bone,0.06);
+    boneLink(dinosaur,[-0.78,1.72,-11+side*0.43],[-0.48,1.52,-11+side*0.48],0.06,bone,0.05);
   }
+  for(let ribIndex=0;ribIndex<7;ribIndex++) {
+    const rib=new THREE.Mesh(new THREE.TorusGeometry(0.49,0.038,8,24,Math.PI),bone);
+    rib.position.set(-0.92+ribIndex*0.31,1.86,-11);
+    rib.rotation.set(Math.PI,Math.PI/2,0);
+    rib.scale.set(0.82,1,1);
+    dinosaur.add(rib);
+  }
+  boneLink(dinosaur,[-0.88,1.38,-11],[0.92,1.38,-11],0.055,bone,0.05);
+  dinosaur.add(ellipsoid(0.54,0.29,0.48,0xa49170,0.82,bone).translateX(0.2).translateY(1.86).translateZ(-11));
   boneLink(dinosaur,[-1.42,1.96,-11],[-1.72,1.14,-11],0.12,bone,0.1);
   boneLink(dinosaur,[0.25,1.96,-11],[0.63,1.15,-11],0.12,bone,0.1);
   boneLink(dinosaur,[-1.72,1.14,-11],[-1.38,0.31,-11],0.09,bone,0.11);
@@ -3405,7 +3454,8 @@ function buildLevel3() {
 
 // ---------- LOOP ----------
 function updatePlayer(dt) {
-  const speed = (keys["ShiftLeft"]?6.5:4)*dt;
+  if(!playerVelocity) playerVelocity=new THREE.Vector3();
+  const maxSpeed=keys["ShiftLeft"]||keys["ShiftRight"]?7.4:state.level===1?5.8:5.1;
   vaultJumpTimer=Math.max(0,vaultJumpTimer-dt);
   const f = new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
   const r = new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
@@ -3414,16 +3464,32 @@ function updatePlayer(dt) {
   if (keys["KeyS"]||keys["ArrowDown"]||keys["btn_back"]){mx-=f.x;mz-=f.z;}
   if (keys["KeyA"]||keys["ArrowLeft"]||keys["btn_left"]){mx-=r.x;mz-=r.z;}
   if (keys["KeyD"]||keys["ArrowRight"]||keys["btn_right"]){mx+=r.x;mz+=r.z;}
-  if (mx||mz) {
-    const l=Math.hypot(mx,mz),nextX=THREE.MathUtils.clamp(player.x+mx/l*speed,-15,15),
-      nextZ=THREE.MathUtils.clamp(player.z+mz/l*speed,-15,15);
-    const blocked=vaultJumpTimer<=0&&vaultObstacles.some(obstacle=>{
+  const phoneOverlay=document.getElementById("phoneChatOverlay");
+  if(phoneOverlay&&!phoneOverlay.hidden) { mx=0; mz=0; }
+  const inputLength=Math.hypot(mx,mz);
+  if(inputLength) { mx/=inputLength; mz/=inputLength; }
+  const response=1-Math.exp(-dt*(inputLength?15:19));
+  playerVelocity.x=THREE.MathUtils.lerp(playerVelocity.x,mx*maxSpeed,response);
+  playerVelocity.z=THREE.MathUtils.lerp(playerVelocity.z,mz*maxSpeed,response);
+  const isBlocked=(x,z)=>{
+    return vaultJumpTimer<=0&&vaultObstacles.some(obstacle=>{
       if(!isObstacleVisible(obstacle)) return false;
       const currentInside=Math.abs(player.x-obstacle.x)<obstacle.halfX&&Math.abs(player.z-obstacle.z)<obstacle.halfZ;
-      const nextInside=Math.abs(nextX-obstacle.x)<obstacle.halfX&&Math.abs(nextZ-obstacle.z)<obstacle.halfZ;
+      const nextInside=Math.abs(x-obstacle.x)<obstacle.halfX&&Math.abs(z-obstacle.z)<obstacle.halfZ;
       return nextInside&&!currentInside;
     });
-    if(!blocked) { player.x=nextX;player.z=nextZ; }
+  };
+  const nextX=THREE.MathUtils.clamp(player.x+playerVelocity.x*dt,-15,15);
+  if(!isBlocked(nextX,player.z)) player.x=nextX;
+  else playerVelocity.x=0;
+  const nextZ=THREE.MathUtils.clamp(player.z+playerVelocity.z*dt,-15,15);
+  if(!isBlocked(player.x,nextZ)) player.z=nextZ;
+  else playerVelocity.z=0;
+  if((player.x<=-15||player.x>=15)&&(Math.sign(playerVelocity.x)===Math.sign(player.x))) {
+    playerVelocity.x=0;
+  }
+  if((player.z<=-15||player.z>=15)&&(Math.sign(playerVelocity.z)===Math.sign(player.z))) {
+    playerVelocity.z=0;
   }
   if(vaultJumpTimer>0) player.y=1.6+Math.sin((1-vaultJumpTimer/0.82)*Math.PI)*0.95;
   else if(state.level!==3||!state.memory.inStudy) player.y=THREE.MathUtils.lerp(player.y,1.6,1-Math.exp(-dt*12));
@@ -3805,7 +3871,7 @@ function closeIntro() {
   onResize();
   if (state.level === 1) showInstr("BRIEFING — LEVEL 1 · EASY", "<b>Goal:</b> Find at least <b>4 clues</b> and vault the single marked trail log before leaving.<br><br>• <b>WASD</b> move · Drag to look<br>• Follow the live field map to the camp, hill, road and stream<br>• <b>F</b> flashlight · <b>SPACE</b> climb the hill or vault the marked fallen log<br>• Hold and use the signal flare with <b>E</b> if needed<br>• Click or tap the campsite, trees, road and footprints<br><br>Encounters are non-lethal: use the flashlight to hold the forest creature back. Watch the smoke. Follow the prints.");
   else if (state.level === 2) showInstr("BRIEFING — LEVEL 2 · MEDIUM", "<b>Goal:</b> Uncover Project Echo — <b>4 clues</b> — restore the lights and vault <b>two blocked gallery routes</b>.<br><br>• Find the brass wall switch to light the museum<br>• Question the artifact, knight, dinosaur skeleton, and painted witness<br>• Search the curator's desk; click the portrait to talk or type <b>examine painting</b> to inspect it<br>• Press <b>SPACE</b> while moving forward near the fallen display and toppled pedestal<br>• Drive off both ghosts: aim the flashlight, use the UV repeller, or spray the salt-mist can at a nearby ghost and press <b>E</b> to freeze it for 4.5 seconds. The faster second ghost appears when the first vanishes.<br>• In team mode, pass the investigation between players; all discoveries are shared");
-  else showInstr("BRIEFING — LEVEL 3 · HARD", "<b>Goal:</b> Prove innocence — <b>5 evidence</b> pieces — restore the hall lights and vault <b>four obstacles</b> across the study and hall.<br><br>• Find the wall switch and click it to light the hall<br>• Walk up the staircase to reach the portrait landing<br>• Enter the <b>Study</b> through the door and inspect the clock, letter and weapon<br>• Question Vale and Anna; check the security terminal<br>• Use a signal flare to distract the faster intruder or aim the salt-mist can at them to freeze them for 4.5 seconds; vault the overturned study table, then return to the hall<br>• Vault the hall table, fallen chair, and shattered chandelier before presenting your case<br>• Return to the hall, then type <b>prove my innocence</b>");
+  else showInstr("BRIEFING — LEVEL 3 · HARD", "<b>Goal:</b> Prove innocence — <b>5 evidence</b> pieces — restore the hall lights and vault <b>four obstacles</b> across the study and hall.<br><br>• Find the wall switch and click it to light the hall<br>• Walk up the staircase to reach the portrait landing<br>• Enter the <b>Study</b> through the door and inspect the clock, letter and weapon<br>• Question Vale and Anna; check the security terminal<br>• Use a signal flare to distract the faster intruder or aim the restraint-foam can at them to pin them safely for 4.5 seconds; vault the overturned study table, then return to the hall<br>• Vault the hall table, fallen chair, and shattered chandelier before presenting your case<br>• Return to the hall, then type <b>prove my innocence</b>");
 }
 function toggleMenu(){document.getElementById("sideMenu").classList.toggle("open");}
 function restartLevel(){resetLevel(state.level);document.getElementById("sideMenu").classList.remove("open");addMsg("system","Restarted.");}
@@ -3845,10 +3911,10 @@ function updateUI() {
   }
   const phoneButton=document.getElementById("phoneQuickButton");
   if(phoneButton) {
-    const phoneOpen=Boolean(phoneRigOpen||(!document.getElementById("phoneChatOverlay").hidden));
+    const phoneOpen=!document.getElementById("phoneChatOverlay").hidden;
     document.querySelector(".quick-controls")?.classList.toggle("phone-open",phoneOpen);
-    phoneButton.textContent=phoneOpen?"📱 PUT AWAY":phonePoweredOn?"📱 PHONE":"📱 POWER ON";
-    phoneButton.setAttribute("aria-label",phoneOpen?"Put field phone away":phonePoweredOn?"Open field phone":"Power on field phone");
+    phoneButton.textContent=phoneOpen?"📱 CLOSE PHONE":phonePoweredOn?"📱 PHONE":"📱 POWER ON";
+    phoneButton.setAttribute("aria-label",phoneOpen?"Close field phone":phonePoweredOn?"Open field phone":"Power on field phone");
   }
   const phonePowerButton=document.getElementById("phonePowerButton");
   if(phonePowerButton) {
@@ -3873,7 +3939,7 @@ function addMsg(type,text,name){
 function resetLevel(lvl) {
   if (!document.getElementById("phoneChatOverlay").hidden) endConversation();
   phonePoweredOn=true;
-  document.querySelector(".game-layout")?.classList.remove("phone-powered-off");
+  syncPhoneLayout();
   clearHeldTool();
   if(phoneRig) phoneRig.visible=false;
   phoneRigOpen=false;
@@ -3931,7 +3997,7 @@ function resetLevel(lvl) {
       {id:"map",name:"🗺️ Map",uses:Infinity,desc:"Hold a live manor floor plan"},
       {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"},
       {id:"flare",name:"🟠 Signal Flare",uses:2,desc:"Bright, non-harmful distraction · E to use"},
-      {id:"spray",name:"🧂 Salt Mist Can",uses:2,desc:"Aim at the nearby intruder and freeze it for 4.5 seconds"}
+      {id:"spray",name:"🧊 Restraint Foam Can",uses:2,desc:"Aim at the intruder to pin it safely for 4.5 seconds"}
     ];
     if(state.memory.foundObject) state.inventory.push({id:"key",name:"🗝️ Strange Key",uses:1,desc:"Echo link"});
     state.objectives=[{id:"restorePower",text:"Restore power in the grand hall",done:state.memory.manorPowerRestored},{text:"Enter study",done:false},{text:"Question Vale & Anna",done:false},{text:"CCTV",done:false},{text:"Vault the hall table",done:false},{text:"Vault the fallen hall chair",done:false},{text:"Vault the fallen chandelier",done:false},{text:"Vault the overturned table in the study",done:false},{text:"Evidence 0/5",done:false}];
@@ -4005,7 +4071,7 @@ function showCommandHelp() {
     ? "Level 1 (easy): examine camp, road, trees, or stream; use phone or compass; climb the hill; vault the marked trail log with Space. Hold the flashlight on the forest creature or use a signal flare, then leave after finding 4 clues."
     : state.level===2
     ? "Level 2 (medium): click the Egyptian artifact, knight, dinosaur, or painting to open its field-phone chat. Ask in your own words or tap a suggested question. Examine the curator desk, repel both ghosts with the flashlight or UV repeller, or aim the salt-mist can at a nearby ghost and press E to freeze it for 4.5 seconds. Restore power, vault both blocked routes, and find 4 clues."
-    : "Level 3 (hard): enter the study; examine the clock, letter, or weapon; click Vale, Anna, or the portrait to open a private field-phone chat. Ask follow-ups or request a recap, then check CCTV. Use a signal flare or spray the nearby intruder with the salt-mist can to freeze it for 4.5 seconds; vault the study table and three hall obstacles (including the shattered chandelier), reach the study door, and return to the lit hall before proving your innocence.";
+    : "Level 3 (hard): enter the study; examine the clock, letter, or weapon; click Vale, Anna, or the portrait to open a private field-phone chat. Ask follow-ups or request a recap, then check CCTV. Use a signal flare or restraint foam to safely pin the nearby intruder for 4.5 seconds; vault the study table and three hall obstacles (including the shattered chandelier), reach the study door, and return to the lit hall before proving your innocence.";
   const teamTip = investigationTeam.members.length > 1 ? ` Team mode: press PASS TO NEXT or P to hand over the shared investigation.` : "";
   addMsg("ai",instructions + teamTip);
 }
