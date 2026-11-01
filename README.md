@@ -12,7 +12,7 @@ ECHOES is a browser-based, first-person mystery adventure built around three con
 | **Levels** | The Unknown (Easy) · Museum After Dark (Medium) · The Final Case (Hard) |
 | **Runs on** | Modern browsers with WebGL support |
 | **Built with** | HTML, CSS, JavaScript, Three.js, and Vite |
-| **Hosting** | Netlify-ready static site |
+| **Hosting** | GitHub Pages and Netlify |
 
 ### What you can do
 
@@ -49,6 +49,8 @@ npm run dev
 ```
 
 Open the local address printed in the terminal. Vite reloads the page as you edit files. Stop the server with `Ctrl+C`.
+
+The workflow in `.github/workflows/deploy.yml` builds and publishes `main` to GitHub Pages. Once the first deployment completes, the site is available at <https://mskram15-maker.github.io/echoes-website/>.
 
 To build and preview the production site locally:
 

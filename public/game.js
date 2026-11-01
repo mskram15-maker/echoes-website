@@ -1,4 +1,5 @@
 // ECHOES — Immersive investigation (smoke, sway, grab, rooms, briefing)
+const assetUrl = path => `${window.ECHOES_BASE_URL || "/"}${path.replace(/^\/+/, "")}`;
 const state = {
   level: 1, health: 85, food: 3, water: 2.5, safety: 60, info: 10,
   hour: 14, minute: 32, location: "Unknown Wilderness",
@@ -2475,7 +2476,7 @@ function buildForest() {
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(60,60,32,32),
     new THREE.MeshStandardMaterial({
-      map: new THREE.TextureLoader().load("/assets/forest/forest_ground_diffuse_1k.jpg", undefined, undefined, error => {
+      map: new THREE.TextureLoader().load(assetUrl("/assets/forest/forest_ground_diffuse_1k.jpg"), undefined, undefined, error => {
         console.error("Unable to load forest floor texture.", error);
       }),
       color:0x91aa83,
@@ -2509,8 +2510,8 @@ function buildForest() {
         treeLocations.some(([x,z]) => Math.hypot(tx-x,tz-z)<2.1)) continue;
     treeLocations.push([tx,tz]);
   }
-  const leafTexture=tiledTexture("/assets/forest/island_tree_leaves_diff_1k.png",1,1,true);
-  const leafAlpha=tiledTexture("/assets/forest/island_tree_leaves_alpha_1k.png",1,1);
+  const leafTexture=tiledTexture(assetUrl("/assets/forest/island_tree_leaves_diff_1k.png"),1,1,true);
+  const leafAlpha=tiledTexture(assetUrl("/assets/forest/island_tree_leaves_alpha_1k.png"),1,1);
   const leafMaterial=new THREE.MeshBasicMaterial({
     color:0xffffff,map:leafTexture,alphaMap:leafAlpha,alphaTest:0.22,side:THREE.DoubleSide
   });
@@ -2618,7 +2619,7 @@ function loadForestTrees(locations, targetWorld, leafGeometry, leafMaterial) {
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
   loader.load(
-    "/assets/forest/fir_sapling.glb",
+    assetUrl("/assets/forest/fir_sapling.glb"),
     gltf => {
       if (worldGroup !== targetWorld || state.level !== 1) {
         disposeObjectResources(gltf.scene);
@@ -2819,7 +2820,7 @@ function buildLevel1() {
     roadShape.lineTo(roadSamples[i].center+roadSamples[i].width,roadSamples[i].z);
   roadShape.closePath();
   const roadMaterial=new THREE.MeshStandardMaterial({
-    map:tiledTexture("/assets/forest/forest_ground_diffuse_1k.jpg",3,7,true),
+    map:tiledTexture(assetUrl("/assets/forest/forest_ground_diffuse_1k.jpg"),3,7,true),
     color:0x927454,roughness:1,side:THREE.DoubleSide
   });
   const road=new THREE.Mesh(new THREE.ShapeGeometry(roadShape,24),roadMaterial);
@@ -2902,15 +2903,15 @@ function buildLevel2() {
 
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(32,32),
-    pbrSurface("/assets/interiors/marble_diff_1k.jpg","/assets/interiors/marble_normal_1k.jpg",
-      "/assets/interiors/marble_roughness_1k.jpg",8,8,0x77736e)
+    pbrSurface(assetUrl("/assets/interiors/marble_diff_1k.jpg"),assetUrl("/assets/interiors/marble_normal_1k.jpg"),
+      assetUrl("/assets/interiors/marble_roughness_1k.jpg"),8,8,0x77736e)
   );
   floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; worldGroup.add(floor);
 
   const wm=pbrSurface(
-    "/assets/interiors/marble_diff_1k.jpg",
-    "/assets/interiors/marble_normal_1k.jpg",
-    "/assets/interiors/marble_roughness_1k.jpg",5,2,0x777a7b
+    assetUrl("/assets/interiors/marble_diff_1k.jpg"),
+    assetUrl("/assets/interiors/marble_normal_1k.jpg"),
+    assetUrl("/assets/interiors/marble_roughness_1k.jpg"),5,2,0x777a7b
   );
   wm.side=THREE.DoubleSide;
   [[0,5,-13],[0,5,13],[-14,5,0],[14,5,0]].forEach((p,i)=>{
@@ -3217,17 +3218,17 @@ function buildLevel3() {
   roomHall = new THREE.Group(); worldGroup.add(roomHall);
   const floorH = new THREE.Mesh(
     new THREE.PlaneGeometry(22,18),
-    pbrSurface("/assets/interiors/wood_floor_diff_1k.jpg","/assets/interiors/wood_floor_normal_1k.jpg",
-      "/assets/interiors/wood_floor_roughness_1k.jpg",5,4,0x807166)
+    pbrSurface(assetUrl("/assets/interiors/wood_floor_diff_1k.jpg"),assetUrl("/assets/interiors/wood_floor_normal_1k.jpg"),
+      assetUrl("/assets/interiors/wood_floor_roughness_1k.jpg"),5,4,0x807166)
   );
   floorH.rotation.x = -Math.PI/2; floorH.receiveShadow = true; roomHall.add(floorH);
   const wm = new THREE.MeshStandardMaterial({
     color:0x8a8180,roughness:0.92,map:createWallpaperTexture(),side:THREE.DoubleSide
   });
   const manorWoodMaterial=pbrSurface(
-    "/assets/interiors/wood_floor_diff_1k.jpg",
-    "/assets/interiors/wood_floor_normal_1k.jpg",
-    "/assets/interiors/wood_floor_roughness_1k.jpg",1.3,1.3,0x927756
+    assetUrl("/assets/interiors/wood_floor_diff_1k.jpg"),
+    assetUrl("/assets/interiors/wood_floor_normal_1k.jpg"),
+    assetUrl("/assets/interiors/wood_floor_roughness_1k.jpg"),1.3,1.3,0x927756
   );
   [[0,5,8],[0,5,-2],[-10,5,3],[10,5,3]].forEach((p,i)=>{
     const w=new THREE.Mesh(new THREE.PlaneGeometry(i<2?22:16,10),wm); w.position.set(...p);
@@ -3275,8 +3276,8 @@ function buildLevel3() {
   }
   roomHall.add(staircase);
   const upperLanding=box(3.7,0.26,3.3,0x514039,-8.45,2.72,-1.05);
-  upperLanding.material=pbrSurface("/assets/interiors/wood_floor_diff_1k.jpg",
-    "/assets/interiors/wood_floor_normal_1k.jpg","/assets/interiors/wood_floor_roughness_1k.jpg",1,1,0x8a7664);
+  upperLanding.material=pbrSurface(assetUrl("/assets/interiors/wood_floor_diff_1k.jpg"),
+    assetUrl("/assets/interiors/wood_floor_normal_1k.jpg"),assetUrl("/assets/interiors/wood_floor_roughness_1k.jpg"),1,1,0x8a7664);
   upperLanding.receiveShadow=true; roomHall.add(upperLanding);
   const landingRail=box(0.12,0.86,3.3,0x49362c,-6.62,3.22,-1.05);
   roomHall.add(landingRail);
@@ -3336,8 +3337,8 @@ function buildLevel3() {
   roomStudy = new THREE.Group(); roomStudy.visible = false; worldGroup.add(roomStudy);
   const floorS = new THREE.Mesh(
     new THREE.PlaneGeometry(14,12),
-    pbrSurface("/assets/interiors/wood_floor_diff_1k.jpg","/assets/interiors/wood_floor_normal_1k.jpg",
-      "/assets/interiors/wood_floor_roughness_1k.jpg",4,3,0x786b62)
+    pbrSurface(assetUrl("/assets/interiors/wood_floor_diff_1k.jpg"),assetUrl("/assets/interiors/wood_floor_normal_1k.jpg"),
+      assetUrl("/assets/interiors/wood_floor_roughness_1k.jpg"),4,3,0x786b62)
   );
   floorS.rotation.x = -Math.PI/2; floorS.position.z = -8; floorS.receiveShadow = true; roomStudy.add(floorS);
   [[0,5,-14],[0,5,-2],[-7,5,-8],[7,5,-8]].forEach((p,i)=>{

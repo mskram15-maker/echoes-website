@@ -44,7 +44,7 @@ body {
     radial-gradient(ellipse at 50% 44%, rgba(61, 91, 75, 0.3) 0%, transparent 48%),
     radial-gradient(ellipse at 16% 78%, rgba(201, 166, 107, 0.1) 0%, transparent 46%),
     linear-gradient(180deg, rgba(6, 12, 13, 0.7), #0d1214 88%),
-    url("/assets/forest/forest_ground_diffuse_1k.jpg") center 48% / cover;
+    var(--forest-background, none) center 48% / cover;
   z-index: 0;
 }
 .home-content { position: relative; z-index: 1; max-width: 900px; }

@@ -5,7 +5,12 @@ import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.j
 window.THREE = THREE;
 window.GLTFLoader = GLTFLoader;
 window.MeshoptDecoder = MeshoptDecoder;
+window.ECHOES_BASE_URL = import.meta.env.BASE_URL;
+document.documentElement.style.setProperty(
+  "--forest-background",
+  `url("${import.meta.env.BASE_URL}assets/forest/forest_ground_diffuse_1k.jpg")`
+);
 
 const gameScript = document.createElement("script");
-gameScript.src = "/game.js";
+gameScript.src = `${import.meta.env.BASE_URL}game.js`;
 document.body.appendChild(gameScript);
