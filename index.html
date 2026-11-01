@@ -48,7 +48,7 @@
         </div>
         <div class="howto-card">
           <h3>4. Talk &amp; Ask</h3>
-          <p>When a character is in view, click to talk. Ask your own question or pick a suggested prompt, then end the chat when you are ready to investigate again.</p>
+          <p>When a character is in view, click to talk. Your character's portrait opens on the in-game phone. Ask your own question or tap a prompt; close the phone with its back button or <b>ESC</b>.</p>
         </div>
       </div>
       <div class="core-mechanic">
@@ -111,6 +111,10 @@
             <button type="button" class="quick-tool music-button" id="musicButton" onclick="toggleMusic()" aria-label="Stop background music" aria-pressed="true">♫ STOP MUSIC</button>
             <button type="button" class="action-button" id="actionButton" onclick="actionButtonAction()">INSPECT</button>
           </div>
+          <div class="phone-notification" id="phoneNotification" role="status" aria-live="polite" hidden>
+            <span class="phone-notification-icon">E</span>
+            <span><strong id="phoneNotificationTitle">New case conversation</strong><small id="phoneNotificationText">Your secure field phone is ready.</small></span>
+          </div>
           <div class="move-overlay">
             <button class="mbtn" data-dir="forward">▲</button>
             <div class="mrow">
@@ -149,11 +153,6 @@
           <button type="button" class="pass-turn-button" onclick="passInvestigator()">PASS TO NEXT</button>
         </div>
         <div class="inventory"><h4>INVENTORY</h4><div class="inv-grid" id="inventory"></div></div>
-        <div class="conversation-panel" id="conversationPanel" aria-live="polite">
-          <div class="conversation-heading"><div><span class="conversation-kicker">CASE-AWARE STORY CHAT · OFFLINE</span><strong id="conversationName">Character</strong></div><button type="button" class="end-conversation" onclick="endConversation()" aria-label="End conversation">END CHAT</button></div>
-          <span class="conversation-insight" id="conversationInsight">CASE MEMORY · Ask a question to build this character's case file</span>
-          <div class="conversation-suggestions" id="conversationSuggestions"></div>
-        </div>
         <div class="chat-log" id="chatLog"></div>
         <div class="command-area">
           <input type="text" id="commandInput" placeholder="Ask questions, give orders, investigate…" autocomplete="off" aria-label="Enter a command" />
@@ -164,6 +163,33 @@
           <button type="button" onclick="showCommandHelp()">HELP</button>
         </div>
       </div>
+    </div>
+    <div class="phone-overlay" id="phoneChatOverlay" hidden>
+      <section class="phone-shell" role="dialog" aria-modal="true" aria-labelledby="conversationName">
+        <div class="phone-statusbar"><span id="phoneClock">23:42</span><span>●●● &nbsp; ◉ &nbsp; ▰</span></div>
+        <header class="phone-header">
+          <button class="phone-back" type="button" onclick="endConversation()" aria-label="Close conversation">‹</button>
+          <div class="phone-avatar" id="phoneAvatar" aria-hidden="true">E</div>
+          <div class="phone-contact">
+            <strong id="conversationName">Character</strong>
+            <span><i class="phone-online-dot"></i><span id="phoneContactStatus">CASE CHANNEL · STORY-AWARE</span></span>
+          </div>
+          <button class="phone-close" type="button" onclick="endConversation()" aria-label="Close phone chat">×</button>
+        </header>
+        <div class="phone-story-note" id="phoneStoryNote">
+          <strong>FIELD GUIDE</strong>
+          <span>Ask in your own words. Try “what happened?”, “why?” or “tell me more.” These story characters remember their conversation and only know what they witnessed.</span>
+        </div>
+        <div class="phone-thread" id="phoneMessages" role="log" aria-live="polite" aria-relevant="additions"></div>
+        <div class="phone-typing" id="phoneTyping" hidden><span></span><span></span><span></span><small>writing a reply</small></div>
+        <div class="phone-suggestions" id="conversationSuggestions" aria-label="Suggested questions"></div>
+        <form class="phone-composer" id="phoneComposer">
+          <label class="sr-only" for="phoneMessageInput">Message the character</label>
+          <input id="phoneMessageInput" name="message" maxlength="400" placeholder="Message…" autocomplete="off" />
+          <button type="submit" aria-label="Send message">➤</button>
+        </form>
+        <div class="phone-home-indicator" aria-hidden="true"></div>
+      </section>
     </div>
     <div id="sideMenu" class="side-menu">
       <button onclick="showScore()">View Score</button>

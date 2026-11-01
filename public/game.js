@@ -26,8 +26,11 @@ let sunLight = null, ambientLight = null, fireLight = null;
 let smokeParticles = [], treeMeshes = [], footprintMeshes = [], peopleMeshes = [];
 let roomStudy = null, roomHall = null;
 let heldToolRig = null, equippedItemId = null;
+let phoneRig = null, phoneRigOpen = false, previousHeldItem = null;
 let conversationTarget = null;
 let conversationHistory = {};
+let phoneThreads = {};
+let phoneNotificationTimer = null;
 let investigationTeam = { members: [], activeIndex: 0 };
 let interiorFixtures = [], interiorSwitchMesh = null, interiorLightsOn = false;
 let fireFlames = [], fireEmbers = [], waterRipples = [];
@@ -128,7 +131,7 @@ function initThree() {
   const canvas = document.getElementById("gameCanvas");
   const wrap = document.getElementById("viewportWrap");
   renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.6));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.85));
   renderer.setSize(wrap.clientWidth, wrap.clientHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -154,6 +157,12 @@ function initThree() {
   heldToolRig.position.set(0.48, -0.47, -0.8);
   heldToolRig.scale.setScalar(0.66);
   camera.add(heldToolRig);
+  phoneRig = new THREE.Group();
+  phoneRig.visible = false;
+  phoneRig.position.set(-0.3,-0.26,-0.86);
+  phoneRig.rotation.set(-0.06,0.12,-0.08);
+  camera.add(phoneRig);
+  buildHeldPhone();
   scene.add(camera);
   const mapCanvas = document.getElementById("miniMap");
   if (mapCanvas) mapContext = mapCanvas.getContext("2d");
@@ -176,6 +185,12 @@ function onResize() {
 function setupControls() {
   const canvas = document.getElementById("gameCanvas");
   window.addEventListener("keydown", e => {
+    if (e.code === "Escape" && conversationTarget) {
+      e.preventDefault();
+      endConversation();
+      return;
+    }
+    if (e.target instanceof HTMLElement && e.target.matches("input,textarea,select,[contenteditable='true']")) return;
     if (document.activeElement === document.getElementById("commandInput") ||
         !document.getElementById("game").classList.contains("active") ||
         document.getElementById("introOverlay").classList.contains("active") ||
@@ -241,8 +256,46 @@ function setupControls() {
     btn.addEventListener("lostpointercapture", off);
   });
   setTimeout(() => { const h = document.getElementById("lookHint"); if (h) h.classList.add("fade"); }, 12000);
+  document.getElementById("phoneComposer").addEventListener("submit",sendPhoneMessage);
 }
-
+function buildHeldPhone() {
+  const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.12,0.42,14),
+    new THREE.MeshStandardMaterial({color:0x303b39,roughness:0.94}));
+  sleeve.rotation.x=-0.74; sleeve.rotation.z=-0.3; sleeve.position.set(-0.02,-0.28,0.08);
+  phoneRig.add(sleeve);
+  const hand = new THREE.Mesh(new THREE.SphereGeometry(0.12,14,10),
+    new THREE.MeshStandardMaterial({color:0xb98260,roughness:0.82}));
+  hand.scale.set(1.05,0.76,1.3); hand.position.set(0.04,-0.17,-0.1); phoneRig.add(hand);
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(0.39,0.69,0.055),
+    new THREE.MeshStandardMaterial({color:0x12191d,metalness:0.62,roughness:0.28}));
+  frame.position.set(0.035,0.12,-0.27); phoneRig.add(frame);
+  const screenCanvas=document.createElement("canvas");
+  screenCanvas.width=128; screenCanvas.height=256;
+  const context=screenCanvas.getContext("2d");
+  context.fillStyle="#101a19"; context.fillRect(0,0,128,256);
+  context.fillStyle="#174338"; context.fillRect(0,0,128,36);
+  context.fillStyle="#e2ece4"; context.font="bold 9px sans-serif"; context.fillText("ECHOES · CASE CHAT",8,15);
+  context.fillStyle="#9fbea8"; context.font="7px sans-serif"; context.fillText("LOCAL • SECURE THREAD",8,27);
+  context.fillStyle="#293a34"; context.beginPath(); context.roundRect(7,48,84,38,7); context.fill();
+  context.fillStyle="#dce8df"; context.font="7px sans-serif"; context.fillText("I remember the",13,62); context.fillText("details you asked me.",13,73);
+  context.fillStyle="#2a654b"; context.beginPath(); context.roundRect(38,97,82,30,7); context.fill();
+  context.fillStyle="#e4f0e5"; context.fillText("What happened",45,110); context.fillText("after closing?",45,120);
+  context.fillStyle="#293a34"; context.beginPath(); context.roundRect(7,139,104,48,7); context.fill();
+  context.fillStyle="#dce8df"; context.fillText("A long coat. A hard",13,153); context.fillText("case. I cannot see",13,164); context.fillText("the visitor's face.",13,175);
+  context.fillStyle="#2a654b"; context.beginPath(); context.roundRect(11,220,106,22); context.fill();
+  context.fillStyle="#a9c2b0"; context.font="7px sans-serif"; context.fillText("Message the witness…",18,234);
+  const screenTexture=new THREE.CanvasTexture(screenCanvas);
+  screenTexture.encoding=THREE.sRGBEncoding;
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.35,0.63),
+    new THREE.MeshBasicMaterial({map:screenTexture}));
+  screen.position.set(0.035,0.12,-0.239); phoneRig.add(screen);
+  const cameraDot = new THREE.Mesh(new THREE.CircleGeometry(0.012,10),
+    new THREE.MeshBasicMaterial({color:0x11151a}));
+  cameraDot.position.set(0.035,0.417,-0.235); phoneRig.add(cameraDot);
+  const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.085,12,10),
+    new THREE.MeshStandardMaterial({color:0xc38c68,roughness:0.8}));
+  thumb.scale.set(1,0.78,1.2); thumb.position.set(0.245,-0.03,-0.24); phoneRig.add(thumb);
+}
 function showInstr(title, body) {
   document.getElementById("instrTitle").textContent = title;
   document.getElementById("instrBody").innerHTML = body;
@@ -399,12 +452,12 @@ function updateDayNight() {
       sunC=0xe6d9bf;
       ambC=0x82939a;
     } else {
-      sunI*=0.12;
-      ambI=Math.max(0.28,ambI*0.5);
-      ambC=0x343b48;
+      sunI*=0.2;
+      ambI=Math.max(0.4,ambI*0.68);
+      ambC=0x4a5360;
     }
     fogC = state.level===2 ? 0x0c0a08 : 0x08060a;
-    exp = interiorLightsOn ? 1.22 : 0.95;
+    exp = interiorLightsOn ? 1.22 : 1.04;
   }
   sunLight.intensity = sunI; sunLight.color.setHex(sunC);
   ambientLight.intensity = ambI; ambientLight.color.setHex(ambC);
@@ -483,6 +536,8 @@ function equipHeldItem(id) {
         new THREE.MeshStandardMaterial({color:0xb34e46,roughness:0.55}));
       tablet.position.set(-0.015+col*0.07,-0.015+row*0.1,-0.265); heldToolRig.add(tablet);
     }
+  } else if (id==="phone") {
+    phoneRig.visible=true;
   }
   updateActionButton();
 }
@@ -689,79 +744,190 @@ function tryLeaveL1() {
 }
 
 // ----- Level 2 -----
+function showPhoneNotification(character) {
+  const notification=document.getElementById("phoneNotification");
+  document.getElementById("phoneNotificationTitle").textContent=`${character.name} · secure case chat`;
+  document.getElementById("phoneNotificationText").textContent="A new conversation opened on your field phone.";
+  notification.hidden=false;
+  clearTimeout(phoneNotificationTimer);
+  phoneNotificationTimer=setTimeout(()=>{notification.hidden=true;},2800);
+}
+function appendPhoneBubble(id,message) {
+  const thread=document.getElementById("phoneMessages");
+  const bubble=document.createElement("div");
+  bubble.className=`phone-message ${message.sender}`;
+  const text=document.createElement("p");
+  text.textContent=message.text;
+  bubble.appendChild(text);
+  const time=document.createElement("time");
+  time.textContent=message.time;
+  bubble.appendChild(time);
+  thread.appendChild(bubble);
+  thread.scrollTop=thread.scrollHeight;
+}
+function currentPhoneTime() {
+  return `${String(state.hour).padStart(2,"0")}:${String(state.minute).padStart(2,"0")}`;
+}
+function renderPhoneThread(id) {
+  const thread=document.getElementById("phoneMessages");
+  thread.replaceChildren();
+  (phoneThreads[id]||[]).forEach(message=>appendPhoneBubble(id,message));
+  thread.scrollTop=thread.scrollHeight;
+}
+function updatePhoneMemory(id) {
+  const memory=conversationHistory[id];
+  const guide=document.getElementById("phoneStoryNote");
+  guide.replaceChildren();
+  const label=document.createElement("strong");
+  label.textContent=memory&&memory.count?`CASE MEMORY · ${memory.count} QUESTIONS`:"FIELD GUIDE";
+  const text=document.createElement("span");
+  text.textContent=memory&&memory.topics.length
+    ? `You have discussed ${memory.topics.slice(-3).join(", ")}. Ask a follow-up or request a recap.`
+    : "Ask in your own words. Try “what happened?”, “why?” or “tell me more.” Characters only know what they witnessed.";
+  guide.append(label,text);
+}
 function beginCharacterConversation(id, openingLine) {
-  const character = characterChatbots[id];
+  const character=characterChatbots[id];
   if (!character) return;
-  conversationTarget = id;
-  const input = document.getElementById("commandInput");
-  input.placeholder = `Ask ${character.name} about the case…`;
-  input.setAttribute("aria-label", `Ask ${character.name} a question`);
-  document.getElementById("conversationPanel").classList.add("active");
-  document.getElementById("conversationName").textContent = character.name;
-  const memory = conversationHistory[id] || { count: 0, topics: [], topicCounts: {}, lastReply: "", lastTopic: "the case" };
-  document.getElementById("conversationInsight").textContent = memory.count
-    ? `CASE MEMORY · ${memory.count} question${memory.count === 1 ? "" : "s"} · ${memory.topics.slice(-3).join(" / ")}`
-    : "CASE MEMORY · Ask a question to build this character's case file";
-  const suggestions = document.getElementById("conversationSuggestions");
+  if (conversationTarget&&conversationTarget!==id) endConversation();
+  conversationTarget=id;
+  phoneRigOpen=true;
+  phoneRig.visible=true;
+  if(equippedItemId!=="phone") previousHeldItem=equippedItemId;
+  if (state.inventory.some(item=>item.id==="phone")) equipHeldItem("phone");
+  const thread=phoneThreads[id]||(phoneThreads[id]=[]);
+  if (!thread.length) thread.push({sender:"character",text:openingLine,time:currentPhoneTime()});
+  document.getElementById("conversationName").textContent=character.name;
+  document.getElementById("phoneAvatar").textContent=character.name.split(/\s+/).map(part=>part[0]).join("").slice(0,2).toUpperCase();
+  document.getElementById("phoneContactStatus").textContent=`LEVEL ${state.level} · LOCAL STORY BOT`;
+  document.getElementById("phoneClock").textContent=currentPhoneTime();
+  updatePhoneMemory(id);
+  const suggestions=document.getElementById("conversationSuggestions");
   suggestions.replaceChildren();
-  character.questions.forEach(question => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "conversation-suggestion";
-    button.textContent = question;
-    button.addEventListener("click", () => askCharacterPrompt(question));
+  character.questions.forEach(question=>{
+    const button=document.createElement("button");
+    button.type="button";
+    button.className="conversation-suggestion";
+    button.textContent=question;
+    button.addEventListener("click",()=>askCharacterPrompt(question));
     suggestions.appendChild(button);
   });
-  addMsg("character", openingLine, character.name);
-  input.focus();
+  renderPhoneThread(id);
+  document.getElementById("phoneChatOverlay").hidden=false;
+  document.getElementById("phoneTyping").hidden=true;
+  document.getElementById("phoneMessageInput").disabled=false;
+  document.querySelector("#phoneComposer button[type='submit']").disabled=false;
+  showPhoneNotification(character);
+  document.getElementById("phoneMessageInput").focus();
 }
 function endConversation() {
-  conversationTarget = null;
-  document.getElementById("conversationPanel").classList.remove("active");
-  document.getElementById("conversationSuggestions").replaceChildren();
-  const input = document.getElementById("commandInput");
-  input.placeholder = "Ask questions, give orders, investigate…";
-  input.setAttribute("aria-label", "Enter a command");
-  document.getElementById("conversationInsight").textContent = "CASE MEMORY · Ask a question to build this character's case file";
-  input.focus();
-}
-function answerCharacterQuestion(question) {
-  const id = conversationTarget;
-  const character = characterChatbots[id];
-  if (!character) return;
-  const memory = conversationHistory[id] || { count: 0, topics: [], topicCounts: {}, lastReply: "", lastTopic: "the case" };
-  if (memory.count && /(?:what did you say|what did i ask|repeat|say that again|tell me again|remember what|what have we|sum(?:marize|mary)|recap|connect (?:the )?clues|what next|give me a hint)/i.test(question)) {
-    addMsg("character", memory.lastReply ? `Your case file connects to ${memory.lastTopic}. ${memory.lastReply}` : character.fallback, character.name);
-    memory.count++;
-    conversationHistory[id] = memory;
-    document.getElementById("conversationInsight").textContent = `CASE MEMORY · ${memory.count} questions · ${memory.topics.slice(-3).join(" / ")}`;
-    return;
+  const wasOpen=Boolean(conversationTarget);
+  conversationTarget=null;
+  phoneRigOpen=false;
+  if (phoneRig) phoneRig.visible=false;
+  document.getElementById("phoneChatOverlay").hidden=true;
+  document.getElementById("phoneTyping").hidden=true;
+  if (equippedItemId==="phone") {
+    const restore=previousHeldItem;
+    previousHeldItem=null;
+    if (restore&&state.inventory.some(item=>item.id===restore)) equipHeldItem(restore);
+    else unequipHeldItem();
   }
-  const answer = character.answers.find(entry => entry.match.test(question));
-  let reply = character.fallback;
+  if(wasOpen) {
+    updateUI();
+    document.getElementById("gameCanvas").focus();
+  }
+}
+function answerCharacterQuestion(id,question) {
+  const character=characterChatbots[id];
+  if (!character) return "This conversation is unavailable. Try speaking to another witness.";
+  const memory=conversationHistory[id]||(conversationHistory[id]={count:0,topics:[],topicCounts:{},lastReply:"",lastTopic:"the case"});
+  const normalized=question.toLowerCase().replace(/[^\p{L}\p{N}' ]/gu," ").replace(/\s+/g," ").trim();
+  const recapRequest=/(?:what did you say|what did i ask|repeat|say that again|tell me again|remember what|what have we|summari[sz]e|recap|connect (?:the )?clues|what next|give me a hint)/i.test(normalized);
+  if (memory.count&&recapRequest) {
+    memory.count++;
+    return `Let me put it together: ${memory.lastReply} That's the detail I remember about ${memory.lastTopic}.`;
+  }
+  let answer=character.answers.find(entry=>entry.match.test(normalized));
+  const followup=/^(?:why|why did (?:that|it) happen|why is that|why was that|how|how did (?:that|it) happen|how so|tell me more|what do you mean|and then|then what|go on|can you explain|what happened(?: next)?|what about that|what about it)\??$/.test(normalized);
+  if (!answer&&followup&&memory.lastTopic) answer=character.answers.find(entry=>entry.topic===memory.lastTopic);
+  if (!answer&&/(?:who are you|what are you|your name|what can you do|help me)/i.test(normalized)) {
+    memory.count++;
+    memory.lastTopic="your role";
+    memory.lastReply=`I am ${character.name}. ${character.fallback}`;
+    return memory.lastReply;
+  }
+  if (!answer&&/(?:what do you think|who is guilty|who did it|is .* guilty|should i accuse|your theory)/i.test(normalized)) {
+    const collected=state.clues.slice(-3);
+    const evidence=collected.length?collected.join("; "):"the details you have asked me about";
+    memory.count++;
+    memory.lastTopic="the evidence";
+    memory.lastReply=`I can only speak from what I witnessed. Your case file currently includes ${evidence}. Compare that with the other witnesses and records before deciding who is responsible.`;
+    return memory.lastReply;
+  }
+  if(!answer&&/^(?:hi|hello|hey|good morning|good evening|are you there)\b/i.test(normalized)) {
+    memory.count++;
+    memory.lastTopic="the conversation";
+    memory.lastReply=`I am here. ${character.fallback}`;
+    return memory.lastReply;
+  }
+  if(!answer&&/^(?:thanks|thank you|got it|okay|ok)\b/i.test(normalized)) {
+    memory.count++;
+    memory.lastTopic=memory.lastTopic||"the case";
+    memory.lastReply="Take your time. Compare what I remember with the other evidence before you decide what happened.";
+    return memory.lastReply;
+  }
+  let reply;
   if (answer) {
-    const topicCount = memory.topicCounts[answer.topic] || 0;
-    reply = Array.isArray(answer.replies) ? answer.replies[topicCount % answer.replies.length] : answer.text;
-    if (answer.topic) {
-      if (!memory.topics.includes(answer.topic)) memory.topics.push(answer.topic);
-      memory.topicCounts[answer.topic] = topicCount + 1;
-      memory.lastTopic = answer.topic;
+    const topicCount=memory.topicCounts[answer.topic]||0;
+    reply=Array.isArray(answer.replies)?answer.replies[topicCount%answer.replies.length]:answer.text;
+    if(answer.topic) {
+      if(!memory.topics.includes(answer.topic)) memory.topics.push(answer.topic);
+      memory.topicCounts[answer.topic]=topicCount+1;
+      memory.lastTopic=answer.topic;
     }
-    if (answer.clue) addClue(answer.clue);
+    if(answer.clue) addClue(answer.clue);
+  } else {
+    const relevantTopic=memory.lastTopic!=="the case"?` We were just discussing ${memory.lastTopic}; if that is what you mean, ask me to tell you more.`:"";
+    reply=`I want to answer carefully, but I don't remember enough to claim that. ${character.fallback}${relevantTopic}`;
+    memory.lastTopic="that detail";
   }
   memory.count++;
-  if (!answer) memory.lastTopic = "that question";
-  memory.lastReply = reply;
-  conversationHistory[id] = memory;
-  document.getElementById("conversationInsight").textContent = `CASE MEMORY · ${memory.count} questions · ${memory.topics.slice(-3).join(" / ") || "first impression"}`;
-  addMsg("character", reply, character.name);
+  memory.lastReply=reply;
+  return reply;
 }
-function askCharacterPrompt(question) {
-  if (!conversationTarget || state.levelComplete) return;
-  addMsg("player", question);
+function sendPhoneMessage(event=null,directText="") {
+  if(event) event.preventDefault();
+  const id=conversationTarget;
+  if(!id||state.levelComplete) return;
+  const input=document.getElementById("phoneMessageInput");
+  const question=(directText||input.value).trim();
+  if(!question) return;
+  input.value="";
+  const messages=phoneThreads[id]||(phoneThreads[id]=[]);
+  messages.push({sender:"player",text:question,time:currentPhoneTime()});
+  appendPhoneBubble(id,messages[messages.length-1]);
   state.turn++;
   advanceTime(1);
-  answerCharacterQuestion(question);
+  document.getElementById("phoneTyping").hidden=false;
+  input.disabled=true;
+  document.querySelector("#phoneComposer button[type='submit']").disabled=true;
+  window.setTimeout(()=>{
+    const reply=answerCharacterQuestion(id,question);
+    messages.push({sender:"character",text:reply,time:currentPhoneTime()});
+    if(conversationTarget===id) {
+      appendPhoneBubble(id,messages[messages.length-1]);
+      document.getElementById("phoneTyping").hidden=true;
+      updatePhoneMemory(id);
+      input.disabled=false;
+      document.querySelector("#phoneComposer button[type='submit']").disabled=false;
+      input.focus();
+    }
+  },420);
+}
+function askCharacterPrompt(question) {
+  if (!conversationTarget||state.levelComplete) return;
+  sendPhoneMessage(null,question);
 }
 function talkArtifact() {
   if (!state.memory.askedArtifact) state.info += 12;
@@ -1076,12 +1242,13 @@ function pbrSurface(diffusePath, normalPath, roughnessPath, repeatX, repeatY, ti
     map:tiledTexture(diffusePath,repeatX,repeatY,true),
     normalMap:tiledTexture(normalPath,repeatX,repeatY),
     roughnessMap:tiledTexture(roughnessPath,repeatX,repeatY),
+    normalScale:new THREE.Vector2(0.72,0.72),
     roughness:0.88
   });
 }
 function configureShadowLight(light, bounds=30) {
   light.castShadow=true;
-  light.shadow.mapSize.set(1024,1024);
+  light.shadow.mapSize.set(2048,2048);
   light.shadow.camera.left=-bounds;
   light.shadow.camera.right=bounds;
   light.shadow.camera.top=bounds;
@@ -2249,6 +2416,14 @@ function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clockSys.getDelta(), 0.05);
   const t = clockSys.elapsedTime;
+  if(phoneRig) {
+    const targetY=phoneRigOpen?-0.26:-0.58;
+    phoneRig.position.y+=(targetY-phoneRig.position.y)*Math.min(1,dt*7);
+    if(phoneRigOpen) {
+      phoneRig.rotation.z=-0.08+Math.sin(t*0.85)*0.012;
+      phoneRig.position.x=-0.3+Math.sin(t*0.65)*0.008;
+    }
+  }
   if (document.getElementById("game").classList.contains("active")) {
     updatePlayer(dt); checkHover();
     // Tree sway
@@ -2380,6 +2555,7 @@ function startLocalCoop() {
 function startJourney(members=[]) {
   investigationTeam = { members, activeIndex: 0 };
   conversationHistory = {};
+  phoneThreads = {};
   document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
   document.getElementById("game").classList.add("active");
   document.getElementById("game").dataset.level="1";
@@ -2424,8 +2600,8 @@ function updateUI() {
   const commandHint = document.getElementById("commandHint");
   if (commandHint) {
     commandHint.textContent = state.level===1 ? "Try: examine road · check phone · head east"
-      : state.level===2 ? "Try: question the knight · search desk · open chamber"
-      : "Try: enter study · check CCTV · prove my innocence";
+      : state.level===2 ? "Try: question the knight · ask the portrait · open chamber"
+      : "Try: talk to Vale · message Anna · check CCTV";
   }
   updateActionButton();
   updateMusicButton();
@@ -2497,10 +2673,11 @@ function resetLevel(lvl) {
 function sendCommand() {
   const input=document.getElementById("commandInput");
   const text=input.value.trim(); if(!text||state.levelComplete)return;
-  input.value=""; addMsg("player",text); state.turn++; advanceTime(1);
+  input.value="";
+  if(conversationTarget) { sendPhoneMessage(null,text); return; }
+  addMsg("player",text); state.turn++; advanceTime(1);
   const c=text.toLowerCase();
   if (/^(help|commands|what can i do|what should i do)\??$/.test(c)) { showCommandHelp(); return; }
-  if (conversationTarget) { answerCharacterQuestion(text); return; }
   if(/flashlight|torch|^f$|light on/.test(c)){toggleFlashlight();return;}
   if(/climb/.test(c)){tryClimb();return;}
   if(/grab|pick up|drop|put down/.test(c)){toggleGrab();return;}
@@ -2548,8 +2725,8 @@ function showCommandHelp() {
   const instructions = state.level===1
     ? "Level 1: examine camp, road, trees, or stream; use phone or compass; climb the hill; grab or drop objects; type 'head east' or 'leave' after finding 4 clues."
     : state.level===2
-    ? "Level 2: talk to the Egyptian artifact, knight, or dinosaur; ask questions about their memories; examine the painting and curator desk; open the chamber with your key; leave after finding 4 clues."
-    : "Level 3: enter the study; examine the clock, letter, or weapon; talk with Vale, Anna, or the portrait; ask characters to repeat or connect their testimony; check CCTV; type 'prove my innocence' after finding 5 pieces of evidence.";
+    ? "Level 2: click the Egyptian artifact, knight, dinosaur, or painting to open its field-phone chat. Ask in your own words or tap a suggested question. Examine the curator desk and open the chamber with your key; leave after finding 4 clues."
+    : "Level 3: enter the study; examine the clock, letter, or weapon; click Vale, Anna, or the portrait to open a private field-phone chat. Ask follow-ups or request a recap, then check CCTV and type 'prove my innocence' after finding 5 pieces of evidence.";
   const teamTip = investigationTeam.members.length > 1 ? ` Team mode: press PASS TO NEXT or P to hand over the shared investigation.` : "";
   addMsg("ai",instructions + teamTip);
 }

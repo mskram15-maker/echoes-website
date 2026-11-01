@@ -19,7 +19,7 @@ ECHOES is a browser-based, first-person mystery adventure built around three con
 - Explore interactive 3D environments and investigate objects.
 - Follow a live map through the forest and search for evidence.
 - Question characters, use inventory tools, and connect clues across cases.
-- Walk up to a character or portrait, click to talk, and ask questions in an offline, story-aware chat.
+- Walk up to a character or portrait to open a separate in-world phone chat with message bubbles, typing feedback, and conversation memory.
 - Play a shared-device co-op case with 2–4 named investigators who take turns and share evidence.
 - See the Sustainable Development Goal (SDG) rule for the current level while you play.
 - Explore atmospheric exhibits and manor rooms with drifting dust and firelit accents.
@@ -61,7 +61,7 @@ npm run preview
 | Ask for suggestions | Type **help** in the command box |
 | Pass the co-op turn | **P** or **PASS TO NEXT** |
 
-In Level 1, use the field map to find landmarks and clues. In Levels 2 and 3, look for a wall switch to light the room. Walk up the staircase in the manor to inspect the upper landing. When you see **click to talk**, interact with the character, choose a suggested question or type your own, and select **END CHAT** to return to regular commands. Use **STOP MUSIC** and **PLAY MUSIC** to control the soundtrack.
+In Level 1, use the field map to find landmarks and clues. In Levels 2 and 3, look for a wall switch to light the room. Walk up the staircase in the manor to inspect the upper landing. When you see **click to talk**, interact with the character to raise the field phone. Choose a suggested question or type naturally into the phone's message box. Ask a follow-up such as “why?”, “tell me more,” or “what did you say?”; close the chat with its back button or **Escape**. Use **STOP MUSIC** and **PLAY MUSIC** to control the soundtrack.
 
 ## The three cases
 
@@ -79,7 +79,7 @@ Each level displays its real-world learning rule next to the objectives:
 | Closed Museum | **11 — Sustainable Cities and Communities** | Respect cultural heritage and preserve artifacts while investigating. |
 | Crime Scene | **16 — Peace, Justice and Strong Institutions** | Follow evidence, question assumptions, and seek a fair outcome. |
 
-Conversations are **offline, scripted story chatbots**, not a connection to an AI service. They recognize common topics, have suggested questions, and stay within the case's established evidence:
+Conversations take place in the in-game field phone, separate from the investigation command log. Each witness has a distinct voice, suggested questions, a persistent per-character chat thread, follow-up context, recaps, and evidence-aware replies. The local story engine handles natural-language topic matching but does not connect to ChatGPT or another hosted AI model; it is deliberately limited to the game's canon and requires no API key or internet connection:
 
 | Character | Voice and role in the story |
 | --- | --- |
@@ -90,7 +90,11 @@ Conversations are **offline, scripted story chatbots**, not a connection to an A
 | Dr. Adrian Vale | A controlled researcher who gives his lab alibi and answers questions about Project Echo. |
 | Anna | A careful housekeeper who separates what she saw from what she cannot know, and urges the player to check the CCTV. |
 
-Click or tap a character when the prompt says **click to talk**. In the museum, click the shifting portrait to question its painted witness; typing **examine painting** still inspects the scene directly. Ask a free-form question or select one of the character's suggested prompts. The responses are written to match the storyline and do not invent evidence or decide guilt from assumptions. No API key, account, or internet connection is needed for dialogue.
+Click or tap a character when the prompt says **click to talk**. In the museum, click the shifting portrait to question its painted witness; typing **examine painting** still inspects the scene directly. Ask a free-form question or select one of the character's suggested prompts. The responses are written to match the storyline, distinguish witness memory from fact, and avoid declaring guilt based on assumptions.
+
+The chat window gives a short getting-started guide and suggested questions so players can discover how to talk to each character. The physical phone model rises into view while a conversation is open. Character threads remain available as you move between levels during a journey.
+
+> **AI transparency:** this school-project build uses a local, story-aware dialogue system—not a real ChatGPT model. Connecting a hosted LLM would require a separately deployed, protected backend and a private provider key; a key must never be embedded in the browser app.
 
 ## Play with friends
 
@@ -106,7 +110,7 @@ This is local pass-the-controller co-op—not online multiplayer. It needs no ac
 - **Web Audio API** generates the level-specific ambient soundtrack in the browser; no audio files or external audio service are required.
 - **Netlify** can host the generated static site.
 
-Three.js and game assets are bundled locally. Google Fonts are loaded from an external CDN, so an internet connection is needed for those fonts. Dialogue and command handling use local JavaScript rules; the story chatbots do not connect to an AI service or require an API key.
+Three.js and game assets are bundled locally. Google Fonts are loaded from an external CDN, so an internet connection is needed for those fonts. Dialogue and command handling use local JavaScript rules; the story chatbots do not connect to an AI service or require an API key. Scene improvements include sharper soft shadows, normal-mapped and roughness-mapped interior surfaces, atmospheric exhibit lighting, environmental particles, detailed character models, and more visible low-light manor lighting.
 
 The forest tree, foliage, and ground textures, along with the interior PBR maps, are free CC0 assets. Sources and credits:
 
