@@ -27,6 +27,8 @@ let smokeParticles = [], treeMeshes = [], footprintMeshes = [], peopleMeshes = [
 let roomStudy = null, roomHall = null;
 let heldToolRig = null, equippedItemId = null;
 let conversationTarget = null;
+let conversationHistory = {};
+let investigationTeam = { members: [], activeIndex: 0 };
 let interiorFixtures = [], interiorSwitchMesh = null, interiorLightsOn = false;
 let fireFlames = [], fireEmbers = [], waterRipples = [];
 let atmosphereFields = [];
@@ -39,14 +41,25 @@ const sdgRules = {
   3: { label: "SDG 16 · PEACE, JUSTICE & STRONG INSTITUTIONS", rule: "Follow evidence, question assumptions, and seek a fair outcome." }
 };
 const characterChatbots = {
+  artifact: {
+    name: "The Egyptian Artifact",
+    questions: ["What is your story?", "Why did the exhibits wake?", "What does the key unlock?"],
+    answers: [
+      { match: /origin|egypt|history|ancient|civilization|artifact|your story/i, topic: "origin", replies: ["I crossed oceans before this city had a name. I am a record of the people who made me, not a prize for those who own me.", "The symbols on my base describe a community that kept its history alive by passing it on. Ask what the curator tried to protect."] },
+      { match: /curse|alive|wake|museum|pulse|machine|why/i, topic: "pulse", replies: ["It was not a curse. At 11:03, a pulse from beneath the gallery woke the symbols carved into my base.", "The hum came from below, not from inside me. Follow the service door and the curator's warning."] },
+      { match: /key|chamber|door|curator|below|open/i, topic: "key", replies: ["The brass key opens the chamber below this wing. The curator tried to stop someone from moving the original.", "Look for the curator's desk. The note there explains why the chamber must remain sealed."] },
+      { match: /project|echo|memory|transfer|subject/i, topic: "echo", replies: ["The machines called it Project Echo. They wanted to copy a living person's memories, as if a life were a museum object.", "The original subject is still alive. Stop the transfer; the curator's note tells you where to begin."] }
+    ],
+    fallback: "I can tell you about my origins, the pulse at 11:03, the brass key, and the warning about Project Echo."
+  },
   knight: {
     name: "The Knight",
     questions: ["What happened after closing?", "What did the stranger carry?", "What woke the exhibits?"],
     answers: [
-      { match: /close|night|after|when|hour|11|time|stranger|figure|coat|case|carry|person/i, text: "After closing, a stranger in a long coat crossed the Egyptian wing with a hard case. He ignored every display and went straight for the service corridor." },
-      { match: /artifact|key|chamber|door|curator|below/i, text: "The curator argued that the original belonged in the sealed chamber below. The little brass key is the only way through that service door." },
-      { match: /dino|skeleton|pulse|sound|wok(?:e|en)?|machine|echo/i, text: "At 11:03, a pulse ran through every glass case. The dinosaur's bones rang like a tuning fork. That was machinery, not a ghost." },
-      { match: /project|echo|transfer|memory/i, text: "I heard the name Project Echo on the curator's recording. Whatever was being moved was a memory, not a museum object." }
+      { match: /close|night|after|when|hour|time|stranger|figure|coat|case|carry|person/i, topic: "visitor", replies: ["After closing, a stranger in a long coat crossed the Egyptian wing with a hard case. He ignored every display and went straight for the service corridor.", "I saw him again beside the Egyptian display. The case was humming. He did not look like a curator."] },
+      { match: /artifact|key|chamber|door|curator|below/i, topic: "chamber", replies: ["The curator argued that the original belonged in the sealed chamber below. The little brass key is the only way through that service door.", "The chamber was sealed for a reason. The curator left a note on the desk—read it before you turn that key."] },
+      { match: /dino|skeleton|pulse|sound|hear|heard|ring|vibrat|11:03|wok(?:e|en)?|machine|echo/i, topic: "pulse", replies: ["At 11:03, a pulse ran through every glass case. The dinosaur's bones rang like a tuning fork. That was machinery, not a ghost.", "I heard the pulse too: one signal, then a hum from below the floor. The dinosaur's ribs caught the vibration."] },
+      { match: /project|echo|transfer|memory/i, topic: "echo", replies: ["I heard the name Project Echo on the curator's recording. Whatever was being moved was a memory, not a museum object.", "It was not the artifact they wanted to move. The machine was designed to transfer a person's memories."] }
     ],
     fallback: "I remember the long coat, the hard case, and the 11:03 pulse. Ask me about the service door, the exhibits, or Project Echo."
   },
@@ -54,22 +67,33 @@ const characterChatbots = {
     name: "The Dinosaur Skeleton",
     questions: ["What was the pulse?", "Who woke you?", "What is Project Echo?"],
     answers: [
-      { match: /pulse|11:03|sound|ring|vibrat|wake|machine/i, text: "11:03 PM. One low pulse, then a hum behind the wall. Every bone carried it. No storm makes a rhythm like that." },
-      { match: /who|person|stranger|figure|coat|knight/i, text: "A long shadow crossed the gallery after the pulse. It carried a case and stopped at the Egyptian display." },
-      { match: /project|echo|transfer|memory|subject/i, text: "The machines used the word 'transfer'. I am only the museum's sensor echo, repeating sounds recorded near the original subject." },
-      { match: /artifact|key|chamber|curator/i, text: "The curator hid a key for the chamber below. The note on the desk explains why the original subject must be found." }
+      { match: /pulse|11:03|sound|ring|vibrat|wake|machine/i, topic: "pulse", replies: ["11:03 PM. One low pulse, then a hum behind the wall. Every bone carried it. No storm makes a rhythm like that.", "Another vibration passed through the gallery, but the first pulse came from below the floor. The sensor log marked it 11:03."] },
+      { match: /who|person|stranger|figure|coat|knight/i, topic: "visitor", replies: ["A long shadow crossed the gallery after the pulse. It carried a case and stopped at the Egyptian display.", "The visitor's steps paused at the sealed service door. I cannot identify a face; I only remember the sound and direction."] },
+      { match: /project|echo|transfer|memory|subject/i, topic: "echo", replies: ["The machines used the word 'transfer'. I am only the museum's sensor echo, repeating sounds recorded near the original subject.", "Project Echo reached the original subject through the equipment below. No exhibit can tell you what that person remembers."] },
+      { match: /artifact|key|chamber|curator/i, topic: "chamber", replies: ["The curator hid a key for the chamber below. The note on the desk explains why the original subject must be found.", "The pulse echoed through the glass, but the curator's note is your best source for what is hidden downstairs."] }
     ],
     fallback: "I can replay what I sensed: a pulse at 11:03, a long-coated visitor, and the word 'transfer'. Which clue should I revisit?"
+  },
+  museumPortrait: {
+    name: "The Museum Portrait",
+    questions: ["What changed in the painting?", "Who is the long-coated figure?", "What does the key symbol mean?"],
+    answers: [
+      { match: /paint|image|scene|change|shift|show|see/i, topic: "image", replies: ["The canvas shifted after the pulse: first a long-coated figure, then a small key symbol in the sky. I cannot show you more than the scene I hold.", "The figure appeared near the Egyptian wing. When the image changed, the key symbol remained. The curator may know what it opens."] },
+      { match: /who|person|stranger|visitor|figure|coat|case/i, topic: "visitor", replies: ["I can show a long coat and a hard case, but not a face. The figure crossed toward the Egyptian wing after closing.", "The painted visitor paused near the service corridor. I cannot identify them; compare the knight's account and the gallery records."] },
+      { match: /key|symbol|door|chamber|curator|open/i, topic: "key", replies: ["The key symbol appeared after the image shifted. It resembles the brass key from the campsite; the curator's desk may explain the connection.", "I only know what the paint remembers: a key, a sealed door, and a figure carrying a case. Ask the artifact about the chamber."] },
+      { match: /pulse|11:03|wake|alive|machine|echo/i, topic: "pulse", replies: ["The gallery shuddered at 11:03. Then the painted scene changed. I am a witness in pigment, not a living person.", "A low pulse moved through the wall before my image shifted. The dinosaur and the knight heard it too."] }
+    ],
+    fallback: "I remember a shifting scene: a long coat, a hard case, and a key symbol. Ask what changed, who crossed the gallery, or what the key might open."
   },
   portrait: {
     name: "The Blackwood Portrait",
     questions: ["Why does the clock show 11:47?", "What changed in the inheritance?", "What do you know about the study?"],
     answers: [
-      { match: /clock|11:47|time|hour/i, text: "The hands stopped at 11:47. That was the hour the Blackwood trust changed hands—and the minute someone moved me from my place above the stairs." },
-      { match: /inherit|trust|money|will|change/i, text: "The trust was rewritten in secret. Look for the clock's hidden note and the letter in the study; the portrait remembers only what it saw." },
-      { match: /study|letter|room|crime|weapon|body/i, text: "A figure in a long coat crossed the landing towards the study. I could not see a face. Anna was near the stairs, watching." },
-      { match: /anna|maid|housekeep/i, text: "Anna notices details people overlook. Ask her what she saw near 11:40, then compare her account with the CCTV." },
-      { match: /vale|doctor|adrian/i, text: "Dr. Vale said he was alone in the lab. The clock's note and the camera may tell you whether that story holds." }
+      { match: /clock|11:47|time|hour/i, topic: "clock", replies: ["The hands stopped at 11:47. That was the hour the Blackwood trust changed hands—and the minute someone moved me from my place above the stairs.", "I could see the clock from my frame. Its hands stopped after the figure passed; the brass plaque records the same minute."] },
+      { match: /inherit|trust|money|will|change/i, topic: "inheritance", replies: ["The trust was rewritten in secret. Look for the clock's hidden note and the letter in the study; the portrait remembers only what it saw.", "I witnessed the house change, not the ink on the document. Check the letter and clock before deciding who benefited."] },
+      { match: /study|letter|room|crime|weapon|body/i, topic: "study", replies: ["A figure in a long coat crossed the landing towards the study. I could not see a face. Anna was near the stairs, watching.", "The long-coated figure went to the study. I cannot identify them; only the records can confirm the timeline."] },
+      { match: /anna|maid|housekeep/i, topic: "anna", replies: ["Anna notices details people overlook. Ask her what she saw near 11:40, then compare her account with the CCTV.", "Anna was near the stairs. She seemed frightened, but I cannot say what she knew. Ask her directly."] },
+      { match: /vale|doctor|adrian/i, topic: "vale", replies: ["Dr. Vale said he was alone in the lab. The clock's note and the camera may tell you whether that story holds.", "I saw Dr. Vale in the hall earlier in the evening, but I cannot confirm where he was at 11:40."] }
     ],
     fallback: "I am a witness, not an oracle. Ask about the 11:47 clock, the Blackwood trust, the study, or the people in the hall."
   },
@@ -77,11 +101,11 @@ const characterChatbots = {
     name: "Dr. Adrian Vale",
     questions: ["Where were you at 11:40?", "What is Project Echo?", "Why should I trust you?"],
     answers: [
-      { match: /alibi|where|lab|alone|11:30|11:40|time|clock/i, text: "I was in the lab from 10:30 until 11:30. I never entered the study. That is what I told the investigators." },
-      { match: /project|echo|transfer|memory|subject/i, text: "Project Echo was meant to preserve a person's memories. The transfer window was 11:30 to midnight. The original subject was never supposed to wake during it." },
-      { match: /anna|maid|witness|coat|figure|stranger|study/i, text: "Anna was in the hall that night. She insists she saw someone in a long coat near the study, but she never saw a face." },
-      { match: /proof|evidence|camera|cctv|footage|innocent/i, text: "Check the security terminal before you accuse anyone. A timeline is only useful when it is supported by evidence." },
-      { match: /trust|guilty|weapon|letter|why/i, text: "The letter and the clock know more than I do. If you have evidence, show me the timeline—not a guess." }
+      { match: /alibi|where|lab|alone|11:30|11:40|time|clock/i, topic: "alibi", replies: ["I was in the lab from 10:30 until 11:30. I never entered the study. That is what I told the investigators.", "My lab access log should show when I left. I will not change my statement without a reason to do so."] },
+      { match: /project|echo|transfer|memory|subject/i, topic: "project echo", replies: ["Project Echo was meant to preserve a person's memories. The transfer window was 11:30 to midnight. The original subject was never supposed to wake during it.", "The project was a memory-transfer experiment. If the original subject woke, the procedure could not safely finish."] },
+      { match: /anna|maid|witness|coat|figure|stranger|study/i, topic: "anna's testimony", replies: ["Anna was in the hall that night. She insists she saw someone in a long coat near the study, but she never saw a face.", "Anna's observation is specific about the coat and time, not the person's identity. It must be checked against the CCTV."] },
+      { match: /proof|evidence|camera|cctv|footage|innocent/i, topic: "evidence", replies: ["Check the security terminal before you accuse anyone. A timeline is only useful when it is supported by evidence.", "The recording can test both my alibi and Anna's account. Please inspect the CCTV before drawing a conclusion."] },
+      { match: /trust|guilty|weapon|letter|why/i, topic: "the accusation", replies: ["The letter and the clock know more than I do. If you have evidence, show me the timeline—not a guess.", "Do not confuse suspicion with proof. The study's evidence and camera record belong in the same timeline."] }
     ],
     fallback: "I can answer about my lab alibi, Project Echo, or the evidence. What would you like to ask?"
   },
@@ -89,11 +113,11 @@ const characterChatbots = {
     name: "Anna, the Housekeeper",
     questions: ["What did you see near the study?", "What time was it?", "Did you recognize the person?"],
     answers: [
-      { match: /coat|figure|person|who|face|recogn|height|study|see|saw/i, text: "I saw a tall figure in a long coat near the study door. The face was hidden. I will not pretend I know who it was." },
-      { match: /time|when|11:40|clock|hour/i, text: "Around 11:40. The hall clock was still ticking then. It stopped later, at 11:47." },
-      { match: /vale|doctor|lab|alibi/i, text: "Dr. Vale said he was in the lab. I cannot confirm that. Please check the CCTV instead of relying on my memory." },
-      { match: /letter|weapon|print|evidence|proof|innocent/i, text: "The letter was on the desk, and the weapon looked clean. The camera recording should tell you who actually went into the study." },
-      { match: /project|echo|transfer|memory/i, text: "I heard Dr. Vale call it Project Echo. I only know what I overheard; the study records and terminal are your real evidence." }
+      { match: /coat|figure|person|who|face|recogn|height|study|see|saw/i, topic: "the figure", replies: ["I saw a tall figure in a long coat near the study door. The face was hidden. I will not pretend I know who it was.", "It was a long coat, around 11:40. I never saw a face, so I cannot name the person."] },
+      { match: /time|when|11:40|clock|hour/i, topic: "the time", replies: ["Around 11:40. The hall clock was still ticking then. It stopped later, at 11:47.", "It was close to 11:40. I remember because the hall clock had not stopped yet."] },
+      { match: /vale|doctor|lab|alibi/i, topic: "Vale's alibi", replies: ["Dr. Vale said he was in the lab. I cannot confirm that. Please check the CCTV instead of relying on my memory.", "He told us he had not left the lab. I did not see him there, so please check the access record."] },
+      { match: /letter|weapon|print|evidence|proof|innocent/i, topic: "the evidence", replies: ["The letter was on the desk, and the weapon looked clean. The camera recording should tell you who actually went into the study.", "I did not touch the scene. The letter, clean weapon, and camera are things you can verify for yourself."] },
+      { match: /project|echo|transfer|memory/i, topic: "Project Echo", replies: ["I heard Dr. Vale call it Project Echo. I only know what I overheard; the study records and terminal are your real evidence.", "I heard the words 'memory transfer', but I do not know the science. The study notes may explain it better."] }
     ],
     fallback: "I can tell you what I saw, and what I did not see. Ask about the long coat, the time, or the CCTV. I will not guess at someone's guilt."
   }
@@ -158,11 +182,12 @@ function setupControls() {
         document.getElementById("scoreOverlay").classList.contains("active") ||
         document.getElementById("instrPopup").classList.contains("show")) return;
     keys[e.code] = true;
-    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","KeyF","Space","KeyE"].includes(e.code)) e.preventDefault();
+    if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","KeyF","Space","KeyE","KeyP"].includes(e.code)) e.preventDefault();
     if (e.repeat) return;
     if (e.code === "KeyF") toggleFlashlight();
     if (e.code === "Space") tryClimb();
     if (e.code === "KeyE") equippedItemId && ["food","water","meds"].includes(equippedItemId) ? useEquippedItem() : toggleGrab();
+    if (e.code === "KeyP" && investigationTeam.members.length > 1) passInvestigator();
   });
   peopleMeshes.forEach(person => {
     person.rotation.y=Math.sin(t*0.45+person.userData.phase)*0.08;
@@ -580,7 +605,7 @@ function tryInteract() {
     if (id==="artifact") talkArtifact();
     else if (id==="knight") talkKnight();
     else if (id==="dinosaur") talkDino();
-    else if (id==="painting") talkPortrait();
+    else if (id==="painting") talkMuseumPortrait();
     else if (id==="door") examineDoor();
     else if (id==="desk") examineDesk();
     else if (id==="case") addMsg("ai","Glass case. Ancient tools and labels. Nothing moves by itself — only the big exhibits speak.");
@@ -673,6 +698,10 @@ function beginCharacterConversation(id, openingLine) {
   input.setAttribute("aria-label", `Ask ${character.name} a question`);
   document.getElementById("conversationPanel").classList.add("active");
   document.getElementById("conversationName").textContent = character.name;
+  const memory = conversationHistory[id] || { count: 0, topics: [], topicCounts: {}, lastReply: "", lastTopic: "the case" };
+  document.getElementById("conversationInsight").textContent = memory.count
+    ? `CASE MEMORY · ${memory.count} question${memory.count === 1 ? "" : "s"} · ${memory.topics.slice(-3).join(" / ")}`
+    : "CASE MEMORY · Ask a question to build this character's case file";
   const suggestions = document.getElementById("conversationSuggestions");
   suggestions.replaceChildren();
   character.questions.forEach(question => {
@@ -693,12 +722,39 @@ function endConversation() {
   const input = document.getElementById("commandInput");
   input.placeholder = "Ask questions, give orders, investigate…";
   input.setAttribute("aria-label", "Enter a command");
+  document.getElementById("conversationInsight").textContent = "CASE MEMORY · Ask a question to build this character's case file";
   input.focus();
 }
 function answerCharacterQuestion(question) {
-  const character = characterChatbots[conversationTarget];
+  const id = conversationTarget;
+  const character = characterChatbots[id];
+  if (!character) return;
+  const memory = conversationHistory[id] || { count: 0, topics: [], topicCounts: {}, lastReply: "", lastTopic: "the case" };
+  if (memory.count && /(?:what did you say|what did i ask|repeat|say that again|tell me again|remember what|what have we|sum(?:marize|mary)|recap|connect (?:the )?clues|what next|give me a hint)/i.test(question)) {
+    addMsg("character", memory.lastReply ? `Your case file connects to ${memory.lastTopic}. ${memory.lastReply}` : character.fallback, character.name);
+    memory.count++;
+    conversationHistory[id] = memory;
+    document.getElementById("conversationInsight").textContent = `CASE MEMORY · ${memory.count} questions · ${memory.topics.slice(-3).join(" / ")}`;
+    return;
+  }
   const answer = character.answers.find(entry => entry.match.test(question));
-  addMsg("character", answer ? answer.text : character.fallback, character.name);
+  let reply = character.fallback;
+  if (answer) {
+    const topicCount = memory.topicCounts[answer.topic] || 0;
+    reply = Array.isArray(answer.replies) ? answer.replies[topicCount % answer.replies.length] : answer.text;
+    if (answer.topic) {
+      if (!memory.topics.includes(answer.topic)) memory.topics.push(answer.topic);
+      memory.topicCounts[answer.topic] = topicCount + 1;
+      memory.lastTopic = answer.topic;
+    }
+    if (answer.clue) addClue(answer.clue);
+  }
+  memory.count++;
+  if (!answer) memory.lastTopic = "that question";
+  memory.lastReply = reply;
+  conversationHistory[id] = memory;
+  document.getElementById("conversationInsight").textContent = `CASE MEMORY · ${memory.count} questions · ${memory.topics.slice(-3).join(" / ") || "first impression"}`;
+  addMsg("character", reply, character.name);
 }
 function askCharacterPrompt(question) {
   if (!conversationTarget || state.levelComplete) return;
@@ -708,11 +764,10 @@ function askCharacterPrompt(question) {
   answerCharacterQuestion(question);
 }
 function talkArtifact() {
-  state.memory.askedArtifact = true; state.info += 12;
-  if (state.memory.foundObject) {
-    addMsg("character","That key opens the chamber under this wing. The curator tried to stop the transfer.","🏺 Egyptian Artifact");
-    addClue("Key opens underground chamber; curator tried to stop transfer");
-  } else addMsg("character","Return when you carry what belongs below.","🏺 Egyptian Artifact");
+  if (!state.memory.askedArtifact) state.info += 12;
+  state.memory.askedArtifact = true;
+  beginCharacterConversation("artifact","The symbols on my base have been humming since 11:03. I am part of the museum's history, not a key to be taken.");
+  if (state.memory.foundObject) addClue("The artifact's brass key opens the sealed chamber below the museum");
   checkL2(); updateUI();
 }
 function talkKnight() {
@@ -727,6 +782,16 @@ function talkDino() {
   state.memory.askedDino = true;
   beginCharacterConversation("dinosaur","At 11:03, a pulse ran through my bones. I am a museum sensor echo, not a living dinosaur—but I remember the sound.");
   addClue("EM pulse 11:03 PM woke the exhibits");
+  checkL2(); updateUI();
+}
+function talkMuseumPortrait() {
+  if (!state.memory.paintingSeen) {
+    state.memory.paintingSeen = true;
+    state.info += 12;
+  }
+  setScene("The painted scene shifts: a long coat, a hard case, and a key symbol in the sky.");
+  beginCharacterConversation("museumPortrait","The pulse changed my scene. I remember a long coat, a hard case, and a key symbol—but no face.");
+  addClue("Painting showed long-coat figure and key symbol");
   checkL2(); updateUI();
 }
 function talkPortrait() {
@@ -977,6 +1042,21 @@ function ellipsoid(rx,ry,rz,col,roughness=0.78,material=null) {
   mesh.scale.set(rx,ry,rz);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
+  return mesh;
+}
+function boneLink(parent,start,end,radius,material,endRadius=radius) {
+  const from = new THREE.Vector3(...start);
+  const to = new THREE.Vector3(...end);
+  const direction = to.clone().sub(from);
+  const mesh = new THREE.Mesh(
+    new THREE.CylinderGeometry(endRadius,radius,direction.length(),9),
+    material
+  );
+  mesh.position.copy(from).add(to).multiplyScalar(0.5);
+  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),direction.normalize());
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  parent.add(mesh);
   return mesh;
 }
 function tiledTexture(path, repeatX, repeatY, colorMap=false) {
@@ -1596,31 +1676,93 @@ function buildLevel2() {
     knight.add(ellipsoid(0.23,0.24,0.24,0x68737e,0.3,armor).translateX(7+side*0.44).translateY(2.52).translateZ(-8));
     knight.add(ellipsoid(0.17,0.5,0.2,0x555f69,0.35,armor).translateX(7+side*0.17).translateY(1.42).translateZ(-8));
     knight.add(ellipsoid(0.13,0.4,0.14,0x29313a,0.45,darkArmor).translateX(7+side*0.17).translateY(0.28).translateZ(-8));
+    knight.add(box(0.23,0.2,0.24,0x69737b,7+side*0.17,0.88,-7.98));
+    knight.add(box(0.28,0.24,0.29,0x69737b,7+side*0.17,2.52,-7.96));
   }
-  const plume = new THREE.Mesh(new THREE.ConeGeometry(0.08,0.62,8),new THREE.MeshStandardMaterial({color:0x7b2830,roughness:0.7}));
-  plume.position.set(7,3.52,-8); knight.add(plume);
+  const cloak = ellipsoid(0.47,0.83,0.17,0x482733,0.82);
+  cloak.position.set(7,1.85,-8.44); knight.add(cloak);
+  const breastplate = new THREE.Mesh(new THREE.TorusGeometry(0.28,0.025,6,24),
+    new THREE.MeshStandardMaterial({color:0xd9b96d,metalness:0.78,roughness:0.27}));
+  breastplate.scale.set(1,1.2,0.4); breastplate.position.set(7,2.2,-7.66); knight.add(breastplate);
+  for(let row=0;row<3;row++) for(let col=0;col<3;col++) {
+    const rivet=ellipsoid(0.035,0.035,0.025,0xe2c37b,0.28);
+    rivet.position.set(6.88+col*0.12,1.93+row*0.13,-7.66);
+    knight.add(rivet);
+  }
+  const shield = box(0.62,0.92,0.18,0x753941,6.32,1.72,-7.7);
+  shield.rotation.z=-0.08; knight.add(shield);
+  const shieldBorder = new THREE.Mesh(new THREE.TorusGeometry(0.32,0.028,6,4),
+    new THREE.MeshStandardMaterial({color:0xd2ae68,metalness:0.72,roughness:0.29}));
+  shieldBorder.scale.set(0.95,1.42,0.4); shieldBorder.position.set(6.32,1.73,-7.59); knight.add(shieldBorder);
+  const shieldMark = ellipsoid(0.11,0.27,0.045,0xe0c27c,0.28);
+  shieldMark.position.set(6.32,1.74,-7.58); knight.add(shieldMark);
+  const sword = box(0.075,1.55,0.07,0xb7c4c6,7.88,1.76,-7.7);
+  sword.rotation.z=0.11; knight.add(sword);
+  knight.add(box(0.43,0.09,0.11,0xb79456,7.88,1.13,-7.67));
+  knight.add(box(0.11,0.32,0.11,0x49332a,7.88,0.95,-7.68));
+  const visor = box(0.4,0.16,0.035,0x172129,7,3.03,-7.69);
+  knight.add(visor);
+  const visorGlowMaterial = new THREE.MeshStandardMaterial({
+    color:0xf0b95d,emissive:0x943d18,emissiveIntensity:0.65,roughness:0.38
+  });
+  for(const eyeX of [6.9,7.1]) {
+    const eye=box(0.075,0.025,0.025,0xe7a94a,eyeX,3.05,-7.66);
+    eye.material=visorGlowMaterial; knight.add(eye);
+  }
+  const plume = new THREE.Mesh(new THREE.ConeGeometry(0.12,0.8,9),new THREE.MeshStandardMaterial({color:0x9d3542,roughness:0.7}));
+  plume.position.set(7,3.56,-8.06); knight.add(plume);
+  const helmetCrest = new THREE.Mesh(new THREE.TorusGeometry(0.27,0.025,6,22),
+    new THREE.MeshStandardMaterial({color:0xd1ad68,metalness:0.76,roughness:0.3}));
+  helmetCrest.position.set(7,3.25,-8.01); knight.add(helmetCrest);
+  knight.userData.visorGlow = visorGlowMaterial;
   addInt(knight,"knight","Medieval Knight");
   glassCabinet(7,-8,2.7,4.15,2.35);
 
   const dinosaur = new THREE.Group();
   const bone = new THREE.MeshStandardMaterial({ color:0xb5a27e, roughness:0.8 });
-  for (let i=0;i<9;i++) {
-    const vertebra = ellipsoid(0.17,0.14,0.2,0xb5a27e,0.8,bone);
-    vertebra.position.set(-1.65+i*0.4,2.18,-11); dinosaur.add(vertebra);
+  for (let i=0;i<15;i++) {
+    const x=-3.9+i*0.39;
+    const size=0.18-Math.max(0,-x-1.6)*0.024;
+    const vertebra = ellipsoid(size,0.13,size,0xb5a27e,0.8,bone);
+    vertebra.position.set(x,2.18,-11); dinosaur.add(vertebra);
   }
   const skull = ellipsoid(0.72,0.43,0.48,0xb5a27e,0.78,bone);
   skull.position.set(2.1,2.42,-11); dinosaur.add(skull);
+  const snout=ellipsoid(0.5,0.23,0.38,0xa49170,0.78,bone);
+  snout.position.set(2.55,2.26,-10.78); dinosaur.add(snout);
   const jaw = box(0.9,0.14,0.65,0x8e7c61,2.35,2.03,-11.05); dinosaur.add(jaw);
+  const toothMaterial=new THREE.MeshStandardMaterial({color:0xe2d6b7,roughness:0.72});
+  for(let tooth=0;tooth<6;tooth++) {
+    const fang=new THREE.Mesh(new THREE.ConeGeometry(0.045,0.16,7),toothMaterial);
+    fang.position.set(2.05+tooth*0.15,2.1,-10.57);
+    fang.rotation.z=Math.PI; dinosaur.add(fang);
+  }
   const eyeSocketMaterial = new THREE.MeshStandardMaterial({color:0x171715,roughness:0.75});
   for (const side of [-1,1]) {
-    const rib = new THREE.Mesh(new THREE.TorusGeometry(0.59,0.055,8,18,Math.PI),bone);
-    rib.position.set(-0.8,2.12,-11+side*0.06);
-    rib.rotation.z=Math.PI; rib.scale.set(1,1.12,1); dinosaur.add(rib);
-    const eye = ellipsoid(0.07,0.07,0.07,0x171715,0.75,eyeSocketMaterial);
-    eye.position.set(2.25,2.55,-11.38); dinosaur.add(eye);
+    for(let ribIndex=0;ribIndex<5;ribIndex++) {
+      const rib = new THREE.Mesh(new THREE.TorusGeometry(0.47,0.045,7,16,Math.PI),bone);
+      rib.position.set(-0.82+ribIndex*0.33,2.05,-11+side*0.1);
+      rib.rotation.z=Math.PI; rib.scale.set(0.86,1.06,0.75); dinosaur.add(rib);
+    }
+    const eye = ellipsoid(0.09,0.085,0.055,0x17202b,0.75,eyeSocketMaterial);
+    eye.position.set(2.19+side*0.2,2.53,-10.56); dinosaur.add(eye);
+    boneLink(dinosaur,[1.55,2.13,-11+side*0.12],[1.94,1.8,-11+side*0.22],0.07,bone,0.06);
   }
-  for (const x of [-1.15,0.45]) {
-    dinosaur.add(new THREE.Mesh(new THREE.TorusGeometry(0.52,0.045,8,18,Math.PI),bone).translateX(x).translateY(2.1).translateZ(-11));
+  boneLink(dinosaur,[-1.42,1.96,-11],[-1.72,1.14,-11],0.12,bone,0.1);
+  boneLink(dinosaur,[0.25,1.96,-11],[0.63,1.15,-11],0.12,bone,0.1);
+  boneLink(dinosaur,[-1.72,1.14,-11],[-1.38,0.31,-11],0.09,bone,0.11);
+  boneLink(dinosaur,[0.63,1.15,-11],[0.9,0.31,-11],0.09,bone,0.11);
+  dinosaur.add(ellipsoid(0.42,0.23,0.36,0xb5a27e,0.82,bone).translateX(-1.02).translateY(1.91).translateZ(-11));
+  for(let tail=0;tail<9;tail++) {
+    const x=-2.3-tail*0.29, scale=0.14-tail*0.009;
+    const joint=ellipsoid(scale,scale*0.82,scale,0x9b896d,0.82,bone);
+    joint.position.set(x,1.72-tail*0.015,-11); dinosaur.add(joint);
+  }
+  for(const footX of [-1.4,0.88]) for(const toe of [-1,0,1]) {
+    const toeBone=new THREE.Mesh(new THREE.ConeGeometry(0.075,0.23,7),bone);
+    toeBone.rotation.z=Math.PI/2;
+    toeBone.position.set(footX+0.13,0.17,-10.96+toe*0.13);
+    dinosaur.add(toeBone);
   }
   dinosaur.add(cyl(0.075,0.11,1.25,0xb5a27e,-1.45,0.78,-11,10));
   dinosaur.add(cyl(0.075,0.11,1.3,0xb5a27e,0.75,0.75,-11,10));
@@ -2171,7 +2313,8 @@ function animate() {
 function addClue(text) {
   if (state.clues.includes(text)) return;
   state.clues.push(text);
-  addMsg("system", "🔎 CLUE " + state.clues.length + ": " + text);
+  const investigator = activeInvestigator();
+  addMsg("system", "🔎 TEAM CLUE " + state.clues.length + ": " + text + (investigator ? ` · recorded by ${investigator.name}` : ""));
   state.info = Math.min(100, state.info + 6);
 }
 function showHome() {
@@ -2187,11 +2330,62 @@ function showMultiplayer() {
   document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
   document.getElementById("multiplayer").classList.add("active");
 }
-function startJourney() {
+const investigationRoles = ["FIELD SCOUT","ARCHIVIST","EVIDENCE ANALYST","CASE REPORTER"];
+function activeInvestigator() {
+  return investigationTeam.members[investigationTeam.activeIndex] || null;
+}
+function refreshTeamFields() {
+  const count=Number(document.getElementById("playerCount").value);
+  document.querySelectorAll(".team-player-field[data-player-index]").forEach(field=>{
+    const visible=Number(field.dataset.playerIndex)<count;
+    field.hidden=!visible;
+    field.querySelector("input").required=visible;
+  });
+}
+function updateTeamUI() {
+  const teamHud = document.getElementById("teamHud");
+  const investigator = activeInvestigator();
+  teamHud.hidden = !investigator;
+  if (investigator) document.getElementById("activeInvestigator").textContent = `${investigator.role} · ${investigator.name}`;
+}
+function passInvestigator() {
+  if (investigationTeam.members.length < 2) return;
+  investigationTeam.activeIndex = (investigationTeam.activeIndex + 1) % investigationTeam.members.length;
+  updateTeamUI();
+  const investigator = activeInvestigator();
+  addMsg("system", `Case hand-off complete. ${investigator.name} is now leading the investigation.`);
+}
+function startLocalCoop() {
+  const count = Number(document.getElementById("playerCount").value);
+  const members = Array.from({length: count}, (_,index) => ({
+    name: document.getElementById(`playerName${index+1}`).value.trim(),
+    role: investigationRoles[index]
+  }));
+  const missing = members.findIndex(member => !member.name);
+  const validation = document.getElementById("teamValidation");
+  if (count < 2 || count > 4 || members.length !== count) {
+    validation.textContent = "Choose a team of two to four investigators.";
+    validation.hidden = false;
+    return;
+  }
+  if (missing !== -1) {
+    validation.textContent = `Enter a name for Investigator ${missing+1} to start the team case.`;
+    validation.hidden = false;
+    document.getElementById(`playerName${missing+1}`).focus();
+    return;
+  }
+  validation.hidden = true;
+  startJourney(members);
+}
+function startJourney(members=[]) {
+  investigationTeam = { members, activeIndex: 0 };
+  conversationHistory = {};
   document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
   document.getElementById("game").classList.add("active");
+  document.getElementById("game").dataset.level="1";
   if (!renderer) initThree();
   onResize(); resetLevel(1);
+  updateTeamUI();
   document.getElementById("introOverlay").classList.add("active");
   document.getElementById("introTitle").textContent = "LEVEL 1 — THE UNKNOWN";
   document.getElementById("introText").textContent = "Find 4 clues before you can leave. Follow the field map, watch the firelight, and use E to handle items.";
@@ -2201,13 +2395,14 @@ function closeIntro() {
   document.getElementById("gameCanvas").focus();
   onResize();
   if (state.level === 1) showInstr("BRIEFING — LEVEL 1", "<b>Goal:</b> Find at least <b>4 clues</b> before leaving.<br><br>• <b>WASD</b> move · Drag to look<br>• Follow the live field map to the camp, hill, road and stream<br>• <b>F</b> flashlight · <b>SPACE</b> climb the hill<br>• Click food or water to hold it; press <b>E</b> to use it<br>• Click or tap the campsite, trees, road and footprints<br><br>Watch the smoke. Follow the prints.");
-  else if (state.level === 2) showInstr("BRIEFING — LEVEL 2", "<b>Goal:</b> Uncover Project Echo — <b>4 clues</b>.<br><br>• Find and click the brass wall switch to light the museum<br>• Artifacts are protected inside glass display cases<br>• Question every exhibit and search the curator desk<br>• Your Strange Key may open the service door<br>• Grab the note on the desk with <b>E</b>");
+  else if (state.level === 2) showInstr("BRIEFING — LEVEL 2", "<b>Goal:</b> Uncover Project Echo — <b>4 clues</b>.<br><br>• Find the brass wall switch to light the museum<br>• Question the artifact, knight, dinosaur skeleton, and painted witness<br>• Search the curator's desk; click the portrait to talk or type <b>examine painting</b> to inspect it<br>• Your Strange Key may open the service door<br>• In team mode, pass the investigation between players; all discoveries are shared");
   else showInstr("BRIEFING — LEVEL 3", "<b>Goal:</b> Prove innocence — <b>5 evidence</b> pieces.<br><br>• Find the wall switch and click it to light the hall<br>• Walk up the staircase to reach the portrait landing<br>• Enter the <b>Study</b> through the door and inspect the clock, letter and weapon<br>• Question Vale and Anna; check the security terminal<br>• Type <b>prove my innocence</b> when ready");
 }
 function toggleMenu(){document.getElementById("sideMenu").classList.toggle("open");}
 function restartLevel(){resetLevel(state.level);document.getElementById("sideMenu").classList.remove("open");addMsg("system","Restarted.");}
 
 function updateUI() {
+  document.getElementById("game").dataset.level=String(state.level);
   document.getElementById("location").textContent = state.location;
   updateTimeDisplay();
   document.getElementById("health").textContent = Math.round(state.health)+"%";
@@ -2241,9 +2436,12 @@ function updateUI() {
   }
   const mapHud=document.getElementById("mapHud");
   if(mapHud) mapHud.hidden=state.level!==1;
+  updateTeamUI();
 }
 function setScene(t){document.getElementById("sceneText").textContent=t;}
 function addMsg(type,text,name){
+  const investigator = activeInvestigator();
+  if(type === "player" && investigator) text = `${investigator.name} · ${text}`;
   const log=document.getElementById("chatLog");
   const div=document.createElement("div"); div.className="msg "+type;
   if(type==="character"&&name) div.innerHTML=`<div class="name">${name}</div>${text}`;
@@ -2325,7 +2523,11 @@ function sendCommand() {
     if(/artifact|egyptian|statue/.test(c)){talkArtifact();return;}
     if(/knight|armor|figure/.test(c)){talkKnight();return;}
     if(/dino|skeleton|pulse/.test(c)){talkDino();return;}
-    if(/painting|portrait/.test(c)){talkPortrait();return;}
+    if(/painting|portrait/.test(c)){
+      if(/talk|ask|chat/.test(c)) talkMuseumPortrait();
+      else examinePainting();
+      return;
+    }
     if(/desk|curator|note/.test(c)){examineDesk();return;}
     if(/door|chamber|key|open/.test(c)){examineDoor();return;}
     addMsg("ai","I didn't recognize that action. Type 'help' to see commands for this level.");
@@ -2346,9 +2548,10 @@ function showCommandHelp() {
   const instructions = state.level===1
     ? "Level 1: examine camp, road, trees, or stream; use phone or compass; climb the hill; grab or drop objects; type 'head east' or 'leave' after finding 4 clues."
     : state.level===2
-    ? "Level 2: question the artifact, knight, or dinosaur; examine the painting or curator desk; open the chamber with your key; leave after finding 4 clues."
-    : "Level 3: enter the study; examine the clock, letter, or weapon; question Vale or Anna; check CCTV; type 'prove my innocence' after finding 5 pieces of evidence.";
-  addMsg("ai",instructions);
+    ? "Level 2: talk to the Egyptian artifact, knight, or dinosaur; ask questions about their memories; examine the painting and curator desk; open the chamber with your key; leave after finding 4 clues."
+    : "Level 3: enter the study; examine the clock, letter, or weapon; talk with Vale, Anna, or the portrait; ask characters to repeat or connect their testimony; check CCTV; type 'prove my innocence' after finding 5 pieces of evidence.";
+  const teamTip = investigationTeam.members.length > 1 ? ` Team mode: press PASS TO NEXT or P to hand over the shared investigation.` : "";
+  addMsg("ai",instructions + teamTip);
 }
 document.getElementById("commandInput").addEventListener("keydown",e=>{if(e.key==="Enter")sendCommand();});
 
@@ -2402,4 +2605,11 @@ function startLevel(lvl) {
     :"Find the hall switch, climb the staircase, and gather 5 pieces of evidence to prove your innocence.";
   resetLevel(lvl);
 }
+document.getElementById("playerCount").addEventListener("change",refreshTeamFields);
+document.querySelectorAll(".team-player-field input").forEach(input=>{
+  input.addEventListener("input",()=>{
+    document.getElementById("teamValidation").hidden=true;
+  });
+});
+refreshTeamFields();
 updateUI();

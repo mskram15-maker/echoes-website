@@ -20,6 +20,7 @@ ECHOES is a browser-based, first-person mystery adventure built around three con
 - Follow a live map through the forest and search for evidence.
 - Question characters, use inventory tools, and connect clues across cases.
 - Walk up to a character or portrait, click to talk, and ask questions in an offline, story-aware chat.
+- Play a shared-device co-op case with 2–4 named investigators who take turns and share evidence.
 - See the Sustainable Development Goal (SDG) rule for the current level while you play.
 - Explore atmospheric exhibits and manor rooms with drifting dust and firelit accents.
 - Turn on the museum and manor lights, climb the manor staircase, and inspect its landing.
@@ -58,6 +59,7 @@ npm run preview
 | Use a held food, water, or medical item | **E** or **USE** |
 | Climb the forest hill | **Space** |
 | Ask for suggestions | Type **help** in the command box |
+| Pass the co-op turn | **P** or **PASS TO NEXT** |
 
 In Level 1, use the field map to find landmarks and clues. In Levels 2 and 3, look for a wall switch to light the room. Walk up the staircase in the manor to inspect the upper landing. When you see **click to talk**, interact with the character, choose a suggested question or type your own, and select **END CHAT** to return to regular commands. Use **STOP MUSIC** and **PLAY MUSIC** to control the soundtrack.
 
@@ -83,11 +85,18 @@ Conversations are **offline, scripted story chatbots**, not a connection to an A
 | --- | --- |
 | Medieval Knight | A terse museum sentinel who recalls a long-coated visitor, the service door, and the 11:03 pulse. |
 | Dinosaur Skeleton | A dry, sensor-like echo that reconstructs sounds but makes clear it is not a living dinosaur. |
+| Museum Portrait | A witness in paint who remembers the changing scene, a hard case, and the key symbol without claiming to recognize a face. |
 | Blackwood Portrait | A witness with a limited point of view who remembers 11:47, the trust, and a figure near the study. |
 | Dr. Adrian Vale | A controlled researcher who gives his lab alibi and answers questions about Project Echo. |
 | Anna | A careful housekeeper who separates what she saw from what she cannot know, and urges the player to check the CCTV. |
 
-Click or tap a character when the prompt says **click to talk**. Ask a free-form question or select one of the character's suggested prompts. The responses are written to match the storyline and do not invent evidence or decide guilt from assumptions. No API key, account, or internet connection is needed for dialogue.
+Click or tap a character when the prompt says **click to talk**. In the museum, click the shifting portrait to question its painted witness; typing **examine painting** still inspects the scene directly. Ask a free-form question or select one of the character's suggested prompts. The responses are written to match the storyline and do not invent evidence or decide guilt from assumptions. No API key, account, or internet connection is needed for dialogue.
+
+## Play with friends
+
+Choose **Play With Friends**, select two to four investigators, and enter a name for each teammate. The team plays on one device and takes turns using the shared keyboard/controller; press **P** or **PASS TO NEXT** to hand over the lead. The active investigator is credited in the case log when they ask questions or record clues. World state, evidence, and level progress are shared.
+
+This is local pass-the-controller co-op—not online multiplayer. It needs no account or server, and has not been presented as online matchmaking.
 
 ## Technology and assets
 
@@ -127,4 +136,4 @@ No environment variables are required. Each deploy builds the Vite app and publi
 | `public/assets/interiors/` | Interior surface maps and asset credits |
 | `package.json` | Project dependencies and Vite commands |
 
-The **Play With Friends** screen is a preview; multiplayer is not implemented yet.
+The **Play With Friends** screen starts a playable 2–4 investigator local co-op session. Online multiplayer is not implemented.

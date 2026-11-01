@@ -60,16 +60,33 @@
   <section id="multiplayer" class="screen">
     <div class="panel">
       <button class="back-btn" onclick="showHome()">← Back</button>
-      <h1>Play With Friends</h1>
-      <p class="mp-intro">Up to 4 investigators can enter the same case. Each explores different leads, then compares evidence.</p>
+      <h1>Play as a Team</h1>
+      <p class="mp-intro">Take turns at one keyboard and build a shared case together. Every teammate can explore, question witnesses, and add discoveries to the team's evidence board.</p>
+      <div class="coop-banner"><span class="coop-indicator"></span><span><strong>LOCAL CO-OP · ONE DEVICE</strong><small>Pass-the-controller teamwork. No accounts, servers, or private network needed.</small></span></div>
       <div class="mp-roles">
-        <div class="role-card">Player 1<br><span>Interrogates</span></div>
-        <div class="role-card">Player 2<br><span>Searches</span></div>
-        <div class="role-card">Player 3<br><span>CCTV</span></div>
-        <div class="role-card">Player 4<br><span>Office</span></div>
+        <div class="role-card"><span class="role-icon">🧭</span><strong>Field Scout</strong><span>Find landmarks and examine the scene.</span></div>
+        <div class="role-card"><span class="role-icon">🏺</span><strong>Archivist</strong><span>Ask exhibits and preserve their history.</span></div>
+        <div class="role-card"><span class="role-icon">🔬</span><strong>Evidence Analyst</strong><span>Connect clues and compare timelines.</span></div>
+        <div class="role-card"><span class="role-icon">📝</span><strong>Case Reporter</strong><span>Record testimony and keep the case focused.</span></div>
       </div>
-      <p class="mp-note">When stories don't match… the truth surfaces.</p>
-      <button class="btn primary" onclick="alert('Multiplayer coming soon — single-player is fully playable.')">CREATE LOBBY</button>
+      <div class="team-setup">
+        <label class="team-count-label" for="playerCount">INVESTIGATION TEAM</label>
+        <select id="playerCount" aria-label="Number of local co-op investigators">
+          <option value="2">2 investigators</option>
+          <option value="3">3 investigators</option>
+          <option value="4">4 investigators</option>
+        </select>
+        <div class="team-player-fields" id="teamPlayerFields">
+          <label class="team-player-field"><span>INVESTIGATOR 1 · FIELD SCOUT</span><input id="playerName1" maxlength="24" value="Alex" autocomplete="off" required /></label>
+          <label class="team-player-field"><span>INVESTIGATOR 2 · ARCHIVIST</span><input id="playerName2" maxlength="24" value="Jordan" autocomplete="off" required /></label>
+          <label class="team-player-field" data-player-index="2" hidden><span>INVESTIGATOR 3 · EVIDENCE ANALYST</span><input id="playerName3" maxlength="24" placeholder="Enter a name" autocomplete="off" /></label>
+          <label class="team-player-field" data-player-index="3" hidden><span>INVESTIGATOR 4 · CASE REPORTER</span><input id="playerName4" maxlength="24" placeholder="Enter a name" autocomplete="off" /></label>
+        </div>
+        <p class="team-validation" id="teamValidation" role="alert" hidden></p>
+        <button class="btn primary" onclick="startLocalCoop()">START TEAM CASE</button>
+      </div>
+      <p class="mp-note">All investigators share one world and evidence board, with story progress carried into the next level. Online matchmaking is not enabled.</p>
+      <button class="btn ghost" onclick="startJourney()">PLAY SOLO INSTEAD</button>
     </div>
   </section>
 
@@ -127,9 +144,14 @@
           <button class="menu-btn" onclick="toggleMenu()">☰</button>
         </div>
         <div class="objectives"><h4>OBJECTIVES</h4><ul id="objectivesList"></ul></div>
+        <div class="team-hud" id="teamHud" hidden>
+          <div class="team-status"><span class="team-status-dot"></span><div><span class="team-status-title">SHARED CASE FILE</span><strong id="activeInvestigator">FIELD SCOUT · ALEX</strong></div></div>
+          <button type="button" class="pass-turn-button" onclick="passInvestigator()">PASS TO NEXT</button>
+        </div>
         <div class="inventory"><h4>INVENTORY</h4><div class="inv-grid" id="inventory"></div></div>
         <div class="conversation-panel" id="conversationPanel" aria-live="polite">
-          <div class="conversation-heading"><div><span class="conversation-kicker">LOCAL STORY CHAT · NO INTERNET NEEDED</span><strong id="conversationName">Character</strong></div><button type="button" class="end-conversation" onclick="endConversation()" aria-label="End conversation">END CHAT</button></div>
+          <div class="conversation-heading"><div><span class="conversation-kicker">CASE-AWARE STORY CHAT · OFFLINE</span><strong id="conversationName">Character</strong></div><button type="button" class="end-conversation" onclick="endConversation()" aria-label="End conversation">END CHAT</button></div>
+          <span class="conversation-insight" id="conversationInsight">CASE MEMORY · Ask a question to build this character's case file</span>
           <div class="conversation-suggestions" id="conversationSuggestions"></div>
         </div>
         <div class="chat-log" id="chatLog"></div>
