@@ -40,15 +40,15 @@
         </div>
         <div class="howto-card">
           <h3>2. Investigate</h3>
-          <p>Click or tap objects to examine. Grab and move clues. Find enough clues before you can leave a level.</p>
+          <p>Click or tap objects to examine. Grab and move clues. Find enough clues and clear every obstacle before you can leave a level.</p>
         </div>
         <div class="howto-card">
           <h3>3. Use Every Tool</h3>
-          <p>Hold food, water, medical supplies, the live map, or compass from your inventory. Open the field phone to decrypt messages, check your bearing, review clues, and contact witnesses.</p>
+          <p>Hold food, water, medical supplies, the live map, compass, or a defensive tool from your inventory. Open the field phone to decrypt messages, check your bearing, review clues, and contact witnesses.</p>
         </div>
         <div class="howto-card">
           <h3>4. Talk &amp; Ask</h3>
-          <p>When a character is in view, click to talk. Open the phone's Messages, Field Map, Compass, and Case File apps. Ask witnesses a question or tap a prompt; press <b>ESC</b> to put the phone away.</p>
+          <p>When a character is in view, click to talk. Open the phone's Messages, Field Map, Compass, and Case File apps. Ask witnesses a question or tap a prompt; use the phone's <b>×</b> button or press <b>ESC</b> to close it.</p>
         </div>
       </div>
       <div class="core-mechanic">
@@ -170,12 +170,13 @@
         </div>
       </div>
     </div>
-    <div class="phone-overlay" id="phoneChatOverlay" hidden>
+    <div class="phone-overlay" id="phoneChatOverlay" onclick="if(event.target===this) endConversation()" hidden>
       <section class="phone-shell" role="dialog" aria-modal="true" aria-label="ECHOES field phone">
         <div class="phone-statusbar">
           <span id="phoneClock">23:42</span>
           <span class="phone-status-controls">●●● &nbsp; ◉ &nbsp; ▰
             <button type="button" class="phone-power-button" id="phonePowerButton" onclick="togglePhonePower()" aria-label="Power off field phone" title="Power off field phone">⏻</button>
+            <button type="button" class="phone-dismiss-button" onclick="endConversation()" aria-label="Close field phone" title="Close field phone">×</button>
           </span>
         </div>
         <div class="phone-home-view" id="phoneHomeView">
