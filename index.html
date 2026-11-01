@@ -22,9 +22,9 @@
         <button class="btn ghost" onclick="showHowTo()">HOW TO PLAY</button>
       </div>
       <div class="levels-preview">
-        <div class="level-card"><span class="level-icon">🌲</span><h3>LEVEL 1</h3><p>The Unknown</p><span class="sdg-card-tag">SDG 15 · LIFE ON LAND</span><span class="stars">★★☆☆☆</span></div>
-        <div class="level-card"><span class="level-icon">🏛️</span><h3>LEVEL 2</h3><p>Museum After Dark</p><span class="sdg-card-tag">SDG 11 · CULTURAL HERITAGE</span><span class="stars">★★★★☆</span></div>
-        <div class="level-card"><span class="level-icon">🕵️</span><h3>LEVEL 3</h3><p>The Final Case</p><span class="sdg-card-tag">SDG 16 · PEACE & JUSTICE</span><span class="stars">★★★★★</span></div>
+        <div class="level-card"><span class="level-icon">🌲</span><h3>LEVEL 1</h3><p>The Unknown</p><span class="sdg-card-tag">SDG 15 · LIFE ON LAND</span><span class="stars">★★☆☆☆ · EASY</span></div>
+        <div class="level-card"><span class="level-icon">🏛️</span><h3>LEVEL 2</h3><p>Museum After Dark</p><span class="sdg-card-tag">SDG 11 · CULTURAL HERITAGE</span><span class="stars">★★★★☆ · MEDIUM</span></div>
+        <div class="level-card"><span class="level-icon">🕵️</span><h3>LEVEL 3</h3><p>The Final Case</p><span class="sdg-card-tag">SDG 16 · PEACE & JUSTICE</span><span class="stars">★★★★★ · HARD</span></div>
       </div>
     </div>
   </section>
@@ -113,7 +113,7 @@
           <div class="quick-controls">
             <button type="button" class="quick-tool" onclick="toggleFlashlight()" aria-label="Toggle flashlight">🔦 LIGHT</button>
             <button type="button" class="quick-tool flare-button" onclick="useItemById('flare')" aria-label="Hold a signal flare">🟠 FLARE</button>
-            <button type="button" class="quick-tool" onclick="useItemById('phone')" aria-label="Open field phone">📱 PHONE</button>
+            <button type="button" class="quick-tool" id="phoneQuickButton" onclick="useItemById('phone')" aria-label="Open field phone">📱 PHONE</button>
             <button type="button" class="quick-tool music-button" id="musicButton" onclick="toggleMusic()" aria-label="Stop background music" aria-pressed="true">♫ STOP MUSIC</button>
             <button type="button" class="action-button" id="actionButton" onclick="actionButtonAction()">INSPECT</button>
           </div>
@@ -172,7 +172,12 @@
     </div>
     <div class="phone-overlay" id="phoneChatOverlay" hidden>
       <section class="phone-shell" role="dialog" aria-modal="true" aria-label="ECHOES field phone">
-        <div class="phone-statusbar"><span id="phoneClock">23:42</span><span>●●● &nbsp; ◉ &nbsp; ▰</span></div>
+        <div class="phone-statusbar">
+          <span id="phoneClock">23:42</span>
+          <span class="phone-status-controls">●●● &nbsp; ◉ &nbsp; ▰
+            <button type="button" class="phone-power-button" id="phonePowerButton" onclick="togglePhonePower()" aria-label="Power off field phone" title="Power off field phone">⏻</button>
+          </span>
+        </div>
         <div class="phone-home-view" id="phoneHomeView">
           <div class="phone-home-heading">
             <span>FIELD TERMINAL · ECHOES OS</span>

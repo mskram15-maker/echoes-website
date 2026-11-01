@@ -25,6 +25,8 @@ ECHOES is a browser-based, first-person mystery adventure built around three con
 - See the Sustainable Development Goal (SDG) rule for the current level while you play.
 - Explore atmospheric exhibits and manor rooms with drifting dust and firelit accents.
 - Turn on the museum and manor lights, climb the manor staircase, and inspect its landing.
+- Clear escalating traversal challenges: vault one marked log in the easy forest, two obstacles and restore power in the medium museum, then vault three obstacles, restore power, and escape the faster intruder in the hard manor.
+- Explore a distant mountain ridge, a textured dirt road, and a visible flowing stream in the forest; the museum and manor use locally bundled PBR stone and wood materials.
 - See articulated first-person hands grip the flashlight, field phone, map, and other tools, with subtle movement sway.
 - Face non-lethal encounters: repel the forest creature and museum wraith with a flashlight, or use a signal flare to create an escape window from the manor intruder.
 - Vault fallen timber, gallery debris, and overturned manor furniture; being caught restarts the current level.
@@ -64,14 +66,15 @@ npm run preview
 | Use the held food, water, medical kit, or flare | **E** or the on-screen action button |
 | Equip a map or compass | Select it in your inventory |
 | Open the field phone | **PHONE** button or select the phone in your inventory |
+| Power the phone screen on or off | Press the small **⏻** button in the phone status bar; while off, use **POWER ON** in the game controls |
 | Use phone apps | Open **Messages**, **Field Map**, **Compass**, or **Case File** |
 | Climb the forest hill or vault a nearby obstacle | **Space** |
 | Ask for suggestions | Type **help** in the command box |
 | Pass the co-op turn | **P** or **PASS TO NEXT** |
 
-Equip the paper map to see a live top-down view of your current level, or equip the compass to read its moving north needle. The phone's **Messages** app decrypts field dispatches in Level 1; in later levels, it opens local witness channels. **Field Map**, **Compass**, and **Case File** remain available as phone apps. In Levels 2 and 3, look for a wall switch to light the room. Walk up the staircase in the manor to inspect the upper landing. When you see **click to talk**, interact with a character to open their phone conversation. Choose a suggested question or type naturally into the message box. Close the phone with its × button or **Escape**. Use **STOP MUSIC** and **PLAY MUSIC** to control the soundtrack.
+Equip the paper map to see a live top-down view of your current level, or equip the compass to read its moving north needle. The phone's **Messages** app decrypts field dispatches in Level 1; in later levels, it opens local witness channels. **Field Map**, **Compass**, and **Case File** remain available as phone apps. The ⏻ button in the phone status bar powers the screen off; the held phone goes dark and the side panel hides until you use **POWER ON**. In Levels 2 and 3, find and use the wall switch before entering the next stage. Vault the marked fallen obstacles with **Space** while moving forward. Walk up the staircase in the manor to inspect the upper landing. When you see **click to talk**, interact with a character to open their phone conversation. Choose a suggested question or type naturally into the message box. Close the phone with its × button or **Escape**. Use **STOP MUSIC** and **PLAY MUSIC** to control the soundtrack.
 
-Encounters are designed as non-lethal escape challenges, not combat. In Levels 1 and 2, aim and hold the flashlight on the approaching presence until the route is clear; a signal flare is another limited-use escape aid. In Level 3, use a flare to distract the intruder, vault the overturned table with **Space**, and reach the study door before the distraction ends. Threats pause while you review clues or use the field phone. If a threat catches you, that level restarts; clues and progress from other levels are retained.
+The cases grow harder as you progress: the forest is **easy** and asks you to vault one marked log; the museum is **medium**, adds a second gallery obstacle and a faster wraith; the manor is **hard**, with three required vaults, a faster intruder, and a timed escape. All traversal obstacles must be cleared before finishing their level. Encounters are designed as non-lethal escape challenges, not combat. In Levels 1 and 2, aim and hold the flashlight on the approaching presence until the route is clear; a signal flare is another limited-use escape aid. In Level 3, use a flare to distract the intruder, vault the overturned study table with **Space**, and reach the study door before the distraction ends. Then vault the two obstacles in the hall before presenting your case. Threats pause while you review clues or use the field phone. If a threat catches you, that level restarts; clues and progress from other levels are retained.
 
 ## The three cases
 

@@ -7,6 +7,9 @@ const state = {
   memory: {
     foundObject: false, flashlightOn: false, climbedHill: false,
     campExamined: false, roadExamined: false, treesExamined: false, streamUsed: false,
+    trailObstacleCleared: false, museumPowerRestored: false, galleryObstacleCleared: false,
+    galleryPedestalCleared: false, manorPowerRestored: false,
+    manorHallTableCleared: false, manorHallChairCleared: false,
     messagesRead: 0, askedArtifact: false, askedKnight: false, askedDino: false,
     paintingSeen: false, deskSearched: false, doorOpened: false,
     clockOpened: false, sceneExamined: false, valeQuestioned: false,
@@ -27,6 +30,7 @@ let smokeParticles = [], treeMeshes = [], footprintMeshes = [], peopleMeshes = [
 let roomStudy = null, roomHall = null;
 let heldToolRig = null, equippedItemId = null;
 let phoneRig = null, phoneRigOpen = false, previousHeldItem = null;
+let phonePoweredOn = true;
 let phoneScreenCanvas = null, phoneScreenContext = null, phoneScreenTexture = null;
 let mapToolTexture = null, mapToolCanvas = null, compassNeedle = null, activePhoneApp = "home";
 let lastPhoneReadoutUpdate = 0;
@@ -378,6 +382,12 @@ function buildHeldPhone() {
 function drawPhoneScreen() {
   if(!phoneScreenContext||!phoneScreenCanvas) return;
   const ctx=phoneScreenContext,w=phoneScreenCanvas.width,h=phoneScreenCanvas.height;
+  if(!phonePoweredOn) {
+    ctx.fillStyle="#020405";
+    ctx.fillRect(0,0,w,h);
+    if(phoneScreenTexture) phoneScreenTexture.needsUpdate=true;
+    return;
+  }
   ctx.fillStyle="#0d1717";ctx.fillRect(0,0,w,h);
   if(activePhoneApp==="map") {
     renderFieldMap(phoneScreenCanvas,ctx,true);
@@ -684,6 +694,10 @@ function equipHeldItem(id) {
     updateActionButton();
     return;
   }
+  if(phoneRig) {
+    phoneRig.visible=false;
+    phoneRigOpen=false;
+  }
   buildGripHand(heldToolRig,{x:id==="map"?-0.18:0,y:0.12,z:0.015});
   if(id==="map") buildGripHand(heldToolRig,{x:0.38,y:0.1,z:0.025,scale:0.86,mirrored:true});
   const metal=new THREE.MeshStandardMaterial({color:0x35434a,metalness:0.72,roughness:0.3});
@@ -913,8 +927,35 @@ function tryVaultOrClimb() {
   if(obstacle) {
     vaultJumpTimer=0.82;
     player.y=Math.max(player.y,2.1);
-    if(obstacle.level===3&&state.memory.inStudy) encounterState.studyObstacleVaulted=true;
-    addMsg("system","You vault the obstacle. Keep moving!");
+    let challengeCleared=false;
+    if(obstacle.challengeId==="forestTrail"&&!state.memory.trailObstacleCleared) {
+      state.memory.trailObstacleCleared=true;
+      challengeCleared=true;
+      checkL1();
+    } else if(obstacle.challengeId==="museumGallery"&&!state.memory.galleryObstacleCleared) {
+      state.memory.galleryObstacleCleared=true;
+      challengeCleared=true;
+      checkL2();
+    } else if(obstacle.challengeId==="museumPedestal"&&!state.memory.galleryPedestalCleared) {
+      state.memory.galleryPedestalCleared=true;
+      challengeCleared=true;
+      checkL2();
+    } else if(obstacle.challengeId==="manorHallTable"&&!state.memory.manorHallTableCleared) {
+      state.memory.manorHallTableCleared=true;
+      challengeCleared=true;
+      checkL3();
+    } else if(obstacle.challengeId==="manorHallChair"&&!state.memory.manorHallChairCleared) {
+      state.memory.manorHallChairCleared=true;
+      challengeCleared=true;
+      checkL3();
+    } else if(obstacle.challengeId==="studyExit"&&!encounterState.studyObstacleVaulted) {
+      encounterState.studyObstacleVaulted=true;
+      challengeCleared=true;
+      checkL3();
+    }
+    addMsg("system",challengeCleared
+      ?"Challenge cleared! You vault the obstacle. Keep moving!"
+      :"You vault the obstacle. Keep moving!");
     return;
   }
   tryClimb();
@@ -1008,13 +1049,20 @@ function checkL1() {
     { text: "Orient — phone, compass, look around", done: state.memory.messagesRead>0 },
     { text: "Investigate campsite", done: state.memory.campExamined },
     { text: "Hill or road survey", done: state.memory.climbedHill || state.memory.roadExamined },
+    { text: "Vault the fallen log on the trail", done: state.memory.trailObstacleCleared },
     { text: "Clues " + n + "/" + state.requiredClues, done: n >= state.requiredClues }
   ];
   if (n >= state.requiredClues && !state.levelComplete)
-    addMsg("system","Enough clues. When ready: walk the eastern road or type 'head east'.");
+    addMsg("system",state.memory.trailObstacleCleared
+      ?"Enough clues and the trail is clear. Walk the eastern road or type 'head east'."
+      :"Evidence gathered. Vault the fallen trail log before taking the eastern road.");
   updateUI();
 }
 function tryLeaveL1() {
+  if (!state.memory.trailObstacleCleared) {
+    addMsg("warning","The marked trail is blocked by a fallen log. Get close and press SPACE while moving forward to vault it.");
+    return;
+  }
   if (state.clues.length < state.requiredClues) {
     addMsg("ai","Not enough information yet. Keep investigating. Clues: "+state.clues.length+"/"+state.requiredClues);
     return;
@@ -1083,6 +1131,8 @@ function showPhoneHome() {
   updatePhoneDeviceReadouts();
 }
 function openFieldPhone() {
+  phonePoweredOn=true;
+  document.querySelector(".game-layout")?.classList.remove("phone-powered-off");
   const overlay=document.getElementById("phoneChatOverlay");
   if(overlay.hidden) previousHeldItem=equippedItemId==="phone"?previousHeldItem:equippedItemId;
   conversationTarget=null;
@@ -1093,6 +1143,30 @@ function openFieldPhone() {
   showPhoneHome();
   updateUI();
   document.getElementById("gameCanvas").blur();
+}
+function togglePhonePower() {
+  const layout=document.querySelector(".game-layout");
+  if(phonePoweredOn) {
+    phonePoweredOn=false;
+    conversationTarget=null;
+    document.getElementById("phoneChatOverlay").hidden=true;
+    document.getElementById("phoneHomeView").hidden=false;
+    document.getElementById("phoneAppView").hidden=true;
+    document.getElementById("phoneConversationView").hidden=true;
+    document.getElementById("phoneTyping").hidden=true;
+    phoneRigOpen=true;
+    if(phoneRig) phoneRig.visible=true;
+    if(layout) layout.classList.add("phone-powered-off");
+    drawPhoneScreen();
+    addMsg("system","Field phone powered off. Its screen is dark.");
+    document.getElementById("gameCanvas").focus();
+  } else {
+    phonePoweredOn=true;
+    if(layout) layout.classList.remove("phone-powered-off");
+    openFieldPhone();
+    addMsg("system","Field phone powered on.");
+  }
+  updateUI();
 }
 function phoneBack() {
   conversationTarget=null;
@@ -1277,6 +1351,8 @@ function compassCardinal(degrees) {
 function beginCharacterConversation(id, openingLine) {
   const character=characterChatbots[id];
   if (!character) return;
+  phonePoweredOn=true;
+  document.querySelector(".game-layout")?.classList.remove("phone-powered-off");
   if (conversationTarget&&conversationTarget!==id) endConversation();
   conversationTarget=id;
   phoneRigOpen=true;
@@ -1499,20 +1575,34 @@ function examineDoor() {
 function checkL2() {
   const n = state.clues.length;
   state.objectives = [
+    { id:"restorePower", text: "Restore power at the wall switch", done: state.memory.museumPowerRestored },
     { text: "Question exhibits", done: state.memory.askedArtifact||state.memory.askedKnight||state.memory.askedDino },
     { text: "Search curator desk", done: state.memory.deskSearched },
     { text: "Understand Project Echo", done: state.clues.some(c=>/ECHO|transfer/i.test(c)) },
+    { text: "Vault the fallen gallery display", done: state.memory.galleryObstacleCleared },
+    { text: "Vault the toppled exhibit pedestal", done: state.memory.galleryPedestalCleared },
     { text: "Clues "+n+"/"+state.requiredClues, done: n>=state.requiredClues }
   ];
-  if (n>=state.requiredClues && !state.levelComplete)
-    addMsg("system",encounterState.active&&!encounterState.cleared
-      ?"Enough clues. Repel the gallery wraith with your flashlight, then type 'leave museum'."
-      :"Enough. Type 'leave museum' or 'I'm ready' when you understand.");
+  if (n>=state.requiredClues && !state.levelComplete) {
+    const remaining=[];
+    if(!state.memory.museumPowerRestored) remaining.push("restore power");
+    if(!state.memory.galleryObstacleCleared) remaining.push("vault the fallen display");
+    if(!state.memory.galleryPedestalCleared) remaining.push("vault the toppled pedestal");
+    if(encounterState.active&&!encounterState.cleared) remaining.push("repel the gallery wraith");
+    addMsg("system",remaining.length
+      ?`Evidence gathered. ${remaining.join(", ")} before leaving.`
+      :"All museum objectives are clear. Type 'leave museum' when ready.");
+  }
   updateUI();
 }
 
 // ----- Level 3 -----
 function enterStudy() {
+  if(!state.memory.manorPowerRestored) {
+    addMsg("warning","The study door is hard to inspect in the dark. Find and switch on the grand hall lights first.");
+    return;
+  }
+  if(state.memory.inStudy) return;
   state.memory.inStudy = true;
   state.location = "Study — Crime Scene";
   player.x = 0; player.z = -10; player.yaw = Math.PI;
@@ -1523,8 +1613,8 @@ function enterStudy() {
   updateUI();
 }
 function leaveStudy() {
-  if(encounterState.active&&!encounterState.cleared&&!encounterState.studyObstacleVaulted) {
-    addMsg("warning","The overturned table blocks the exit. Get close and press Space to vault it.");
+  if(!encounterState.studyObstacleVaulted) {
+    addMsg("warning","The overturned table blocks the study exit. Get close and press SPACE while moving forward to vault it.");
     return;
   }
   if(encounterState.active&&!encounterState.cleared&&Math.hypot(player.x,player.z+2.2)>2.5) {
@@ -1581,19 +1671,36 @@ function checkCCTV() {
 function checkL3() {
   const n = state.clues.length;
   state.objectives = [
+    { id:"restorePower", text: "Restore power in the grand hall", done: state.memory.manorPowerRestored },
     { text: "Enter study & examine scene/clock", done: state.memory.sceneExamined && state.memory.clockOpened },
     { text: "Question Vale and Anna", done: state.memory.valeQuestioned && state.memory.annaQuestioned },
     { text: "Check CCTV", done: state.memory.cctvChecked },
+    { text: "Vault the hall table", done: state.memory.manorHallTableCleared },
+    { text: "Vault the fallen hall chair", done: state.memory.manorHallChairCleared },
+    { text: "Vault the overturned table in the study", done: encounterState.studyObstacleVaulted },
     { text: "Evidence "+n+"/"+state.requiredClues, done: n>=state.requiredClues }
   ];
-  if (n>=state.requiredClues && !state.levelComplete)
-    addMsg("system",encounterState.active&&!encounterState.cleared
-      ?"Enough evidence. Distract the intruder, vault the table, and reach the hall before presenting your case."
-      :"Enough evidence. Type 'prove my innocence' when ready.");
+  if (n>=state.requiredClues && !state.levelComplete) {
+    const remaining=[];
+    if(!state.memory.manorPowerRestored) remaining.push("restore the hall lights");
+    if(!state.memory.manorHallTableCleared) remaining.push("vault the hall table");
+    if(!state.memory.manorHallChairCleared) remaining.push("vault the fallen hall chair");
+    if(!encounterState.studyObstacleVaulted) remaining.push("vault the table");
+    if(encounterState.active&&!encounterState.cleared) remaining.push("distract the intruder and reach the hall");
+    else if(state.memory.inStudy) remaining.push("return to the hall");
+    addMsg("system",remaining.length
+      ?`Evidence gathered. ${remaining.join(", ")} before presenting your case.`
+      :"All evidence is ready. Type 'prove my innocence' when you are in the hall.");
+  }
   updateUI();
 }
 function proveInnocence() {
   if (state.clues.length < state.requiredClues) { addMsg("ai","Need more evidence first."); return; }
+  if(state.memory.inStudy||!encounterState.studyObstacleVaulted||
+    !state.memory.manorHallTableCleared||!state.memory.manorHallChairCleared) {
+    addMsg("warning","Vault the overturned study table and both obstacles in the grand hall, return safely, then present your evidence.");
+    return;
+  }
   if(encounterState.active&&!encounterState.cleared) {
     addMsg("warning","Reach the hall safely before presenting your case. Distract the intruder with the flare, vault the overturned table, and use the study door.");
     return;
@@ -1794,7 +1901,13 @@ function createVaultObstacle(level,parent=worldGroup,variant=0) {
   obstacle.position.set(x,0,z);
   obstacle.traverse(mesh=>{if(mesh.isMesh){mesh.castShadow=true;mesh.receiveShadow=true;}});
   parent.add(obstacle);
-  vaultObstacles.push({level,x,z,halfX,halfZ,parent});
+  const challengeId=level===1&&variant===0?"forestTrail"
+    :level===2&&variant===0?"museumGallery"
+    :level===2&&variant===1?"museumPedestal"
+    :level===3&&parent===roomStudy?"studyExit"
+    :level===3&&variant===0?"manorHallTable"
+    :level===3&&variant===1?"manorHallChair":null;
+  vaultObstacles.push({level,x,z,halfX,halfZ,parent,challengeId});
 }
 function createEncounterThreat(level,parent=worldGroup) {
   const group=new THREE.Group();
@@ -1896,9 +2009,9 @@ function updateEncounter(dt,time) {
     encounterState.threat.visible=true;
     status.hidden=false;
     const messages={
-      1:"Movement in the tree line! Keep the flashlight on the creature and find a way around the fallen timber.",
-      2:"A cold shape drifts out of the gallery. Use the flashlight to drive it back and vault the fallen display.",
-      3:"Someone is blocking the study exit. The flare can create a distraction; use it, vault the debris, and reach the hall."
+      1:"Movement in the tree line! Keep the flashlight on the creature and clear the fallen trail log.",
+      2:"A cold shape drifts out of the gallery. Use the flashlight to drive it back and clear both blocked gallery routes.",
+      3:"Someone is blocking the study exit. Use a flare, vault the study table, then clear two hall obstacles before presenting your case."
     };
     addMsg("warning",messages[state.level]);
   }
@@ -1928,7 +2041,7 @@ function updateEncounter(dt,time) {
     setEncounterHint("DISTRACTED · GET TO THE STUDY DOOR");
   } else {
     encounterState.progress=Math.max(0,encounterState.progress-dt*0.12);
-    const speed=state.level===1?1.15:state.level===2?1.48:2.05;
+    const speed=state.level===1?1.05:state.level===2?1.55:2.15;
     if(distance>0.2) threat.position.add(new THREE.Vector3(towardX,0,towardZ).multiplyScalar(speed*dt));
     setEncounterHint(state.level===3?"Use the signal flare, then escape to the hall":"Aim the flashlight at the threat");
   }
@@ -1951,6 +2064,8 @@ function updateEncounter(dt,time) {
 }
 function setInteriorLights(on) {
   interiorLightsOn=on;
+  if(on&&state.level===2) state.memory.museumPowerRestored=true;
+  if(on&&state.level===3) state.memory.manorPowerRestored=true;
   interiorFixtures.forEach(({light,intensity,bulb})=>{
     light.intensity=on?intensity:0;
     if(bulb) bulb.material.emissiveIntensity=on?0.75:0.08;
@@ -1963,6 +2078,9 @@ function setInteriorLights(on) {
   updateDayNight();
   setScene(on?"The wall lights glow to life, revealing the room and its hidden details.":"The room falls back into shadow.");
   addMsg("system",on?"The lights switch on. Every corner is easier to inspect.":"The lights are off. The flashlight is still available.");
+  const powerObjective=state.objectives.find(objective=>objective.id==="restorePower");
+  if(powerObjective&&on) powerObjective.done=true;
+  updateUI();
 }
 function box(w,h,d,col,x,y,z) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), new THREE.MeshStandardMaterial({ color:col, roughness:0.78, metalness:0.06 }));
@@ -2246,6 +2364,45 @@ function buildForest() {
   worldGroup.add(grass);
 }
 
+function createMountainRidge() {
+  const peaks=[
+    {x:-27,z:-30,width:15,height:12,depth:8},
+    {x:-16,z:-28,width:13,height:16,depth:9},
+    {x:-4,z:-32,width:15,height:19,depth:10},
+    {x:9,z:-30,width:17,height:15,depth:9},
+    {x:23,z:-32,width:15,height:18,depth:10},
+    {x:-22,z:-23,width:13,height:8,depth:7},
+    {x:2,z:-24,width:16,height:10,depth:8},
+    {x:22,z:-23,width:14,height:9,depth:7}
+  ];
+  peaks.forEach((peak,index)=>{
+    const geometry=new THREE.ConeGeometry(1,1,18,5);
+    const positions=geometry.attributes.position;
+    const colors=[];
+    const low=new THREE.Color(0x343d39);
+    const high=new THREE.Color(0x89918a);
+    for(let i=0;i<positions.count;i++) {
+      const x=positions.getX(i),y=positions.getY(i),z=positions.getZ(i);
+      const roughness=Math.sin((x+index)*9.1)*Math.cos((z-index)*7.4)*0.035;
+      positions.setX(i,x*(1+roughness));
+      positions.setZ(i,z*(1+roughness));
+      positions.setY(i,y+Math.sin((x+z+index)*11)*0.018);
+      const altitude=THREE.MathUtils.clamp((y+0.5)*0.92+roughness*2,0,1);
+      colors.push(...low.clone().lerp(high,altitude*0.72).toArray());
+    }
+    positions.needsUpdate=true;
+    geometry.setAttribute("color",new THREE.Float32BufferAttribute(colors,3));
+    geometry.computeVertexNormals();
+    const mountain=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({
+      vertexColors:true,roughness:1,flatShading:true
+    }));
+    mountain.scale.set(peak.width,peak.height,peak.depth);
+    mountain.position.set(peak.x,peak.height/2-0.18,peak.z);
+    mountain.receiveShadow=true;
+    worldGroup.add(mountain);
+  });
+}
+
 function loadForestTrees(locations, targetWorld, leafGeometry, leafMaterial) {
   const loader = new GLTFLoader();
   loader.setMeshoptDecoder(MeshoptDecoder);
@@ -2331,6 +2488,7 @@ function buildLevel1() {
   scene.fog = new THREE.FogExp2(0x0a100c, 0.022);
 
   buildForest();
+  createMountainRidge();
   const rockTones=[0x55554b,0x625d52,0x494d46,0x71695b];
   for (let i=0;i<26;i++) {
     const rx=(Math.random()-0.5)*38, rz=(Math.random()-0.5)*38;
@@ -2449,9 +2607,11 @@ function buildLevel1() {
   for(let i=roadSamples.length-1;i>=0;i--)
     roadShape.lineTo(roadSamples[i].center+roadSamples[i].width,roadSamples[i].z);
   roadShape.closePath();
-  const road=new THREE.Mesh(new THREE.ShapeGeometry(roadShape,24),new THREE.MeshStandardMaterial({
-    color:0x65513b,roughness:1,side:THREE.DoubleSide
-  }));
+  const roadMaterial=new THREE.MeshStandardMaterial({
+    map:tiledTexture("/assets/forest/forest_ground_diffuse_1k.jpg",3,7,true),
+    color:0x927454,roughness:1,side:THREE.DoubleSide
+  });
+  const road=new THREE.Mesh(new THREE.ShapeGeometry(roadShape,24),roadMaterial);
   road.rotation.x=-Math.PI/2; road.position.y=0.035; road.receiveShadow=true;
   road.userData.interactionRoot=true;
   addInt(road,"road","Dirt Road — tire tracks");
@@ -2479,8 +2639,11 @@ function buildLevel1() {
   for(let i=streamCenters.length-1;i>=0;i--) streamShape.lineTo(streamCenters[i].x,streamCenters[i].z+streamCenters[i].width);
   streamShape.closePath();
   const stream=new THREE.Mesh(new THREE.ShapeGeometry(streamShape,28),
-    new THREE.MeshPhysicalMaterial({color:0x4e9a9b,roughness:0.16,metalness:0.12,transparent:true,opacity:0.86,side:THREE.DoubleSide}));
-  stream.rotation.x=-Math.PI/2; stream.position.set(0,0.055,26);
+    new THREE.MeshPhysicalMaterial({
+      color:0x4e9a9b,roughness:0.12,metalness:0.08,clearcoat:0.92,clearcoatRoughness:0.12,
+      transparent:true,opacity:0.86,side:THREE.DoubleSide
+    }));
+  stream.rotation.x=-Math.PI/2; stream.position.set(0,0.055,0);
   addInt(stream,"stream","Clear running stream");
   for(let i=1;i<streamCenters.length-1;i+=2) {
     const sample=streamCenters[i];
@@ -2533,7 +2696,12 @@ function buildLevel2() {
   );
   floor.rotation.x = -Math.PI/2; floor.receiveShadow = true; worldGroup.add(floor);
 
-  const wm = new THREE.MeshStandardMaterial({ color:0x26303a, roughness:0.88 });
+  const wm=pbrSurface(
+    "/assets/interiors/marble_diff_1k.jpg",
+    "/assets/interiors/marble_normal_1k.jpg",
+    "/assets/interiors/marble_roughness_1k.jpg",5,2,0x777a7b
+  );
+  wm.side=THREE.DoubleSide;
   [[0,5,-13],[0,5,13],[-14,5,0],[14,5,0]].forEach((p,i)=>{
     const w=new THREE.Mesh(new THREE.PlaneGeometry(32,11),wm); w.position.set(...p);
     if(i>=2)w.rotation.y=Math.PI/2*(i===2?1:-1); if(i===1)w.rotation.y=Math.PI; worldGroup.add(w);
@@ -2544,7 +2712,9 @@ function buildLevel2() {
   worldGroup.add(box(32,0.35,32,0x191d24,0,9,-1));
   for (let i=-2;i<=2;i++) if(i) {
     const x=i*5.5;
-    worldGroup.add(cyl(0.49,0.53,8,0x6d6251,x,4,-11,20));
+    const column=cyl(0.49,0.53,8,0x6d6251,x,4,-11,20);
+    column.material=wm;
+    worldGroup.add(column);
     worldGroup.add(cyl(0.72,0.68,0.34,0x82735c,x,0.2,-11,20));
     worldGroup.add(cyl(0.67,0.57,0.3,0x82735c,x,7.85,-11,20));
     worldGroup.add(cyl(0.56,0.56,0.12,0xb09868,x,0.42,-11,20));
@@ -2554,8 +2724,9 @@ function buildLevel2() {
 
   const goldMaterial = new THREE.MeshStandardMaterial({ color:0xc99c52, metalness:0.68, roughness:0.3 });
   const stoneMaterial = new THREE.MeshStandardMaterial({ color:0x8a7860, roughness:0.78 });
-  const glassMaterial = new THREE.MeshStandardMaterial({
-    color:0x9cc4d1, metalness:0.18, roughness:0.15, transparent:true, opacity:0.14, depthWrite:false
+  const glassMaterial = new THREE.MeshPhysicalMaterial({
+    color:0x9cc4d1, metalness:0.18, roughness:0.1, clearcoat:1, clearcoatRoughness:0.06,
+    transparent:true, opacity:0.16, depthWrite:false
   });
   const glassCabinet=(x,z,width,height,depth)=>{
     const cabinet=new THREE.Group();
@@ -2833,6 +3004,11 @@ function buildLevel3() {
   const wm = new THREE.MeshStandardMaterial({
     color:0x8a8180,roughness:0.92,map:createWallpaperTexture(),side:THREE.DoubleSide
   });
+  const manorWoodMaterial=pbrSurface(
+    "/assets/interiors/wood_floor_diff_1k.jpg",
+    "/assets/interiors/wood_floor_normal_1k.jpg",
+    "/assets/interiors/wood_floor_roughness_1k.jpg",1.3,1.3,0x927756
+  );
   [[0,5,8],[0,5,-2],[-10,5,3],[10,5,3]].forEach((p,i)=>{
     const w=new THREE.Mesh(new THREE.PlaneGeometry(i<2?22:16,10),wm); w.position.set(...p);
     if(i>=2)w.rotation.y=Math.PI/2*(i===2?1:-1); if(i===0)w.rotation.y=Math.PI; roomHall.add(w);
@@ -2863,13 +3039,18 @@ function buildLevel3() {
   const staircase = new THREE.Group();
   for (let i=0;i<8;i++) {
     const step=box(2.2,0.32,0.72,0x554239,-8.8,0.18+i*0.32,5.6-i*0.72);
+    step.material=manorWoodMaterial;
     staircase.add(step);
-    staircase.add(box(2.24,0.055,0.12,0x806044,-8.8,0.36+i*0.32,5.96-i*0.72));
-    for(const side of [-1,1]) staircase.add(box(0.07,0.62,0.07,0x74573f,
-      -8.8+side*1.02,0.68+i*0.32,5.6-i*0.72));
+    const tread=box(2.24,0.055,0.12,0x806044,-8.8,0.36+i*0.32,5.96-i*0.72);
+    tread.material=manorWoodMaterial; staircase.add(tread);
+    for(const side of [-1,1]) {
+      const baluster=box(0.07,0.62,0.07,0x74573f,-8.8+side*1.02,0.68+i*0.32,5.6-i*0.72);
+      baluster.material=manorWoodMaterial; staircase.add(baluster);
+    }
   }
   for(const side of [-1,1]) {
     const handrail=cyl(0.065,0.065,5.56,0x806044,-8.8+side*1.02,1.8,3.08,10);
+    handrail.material=manorWoodMaterial;
     handrail.rotation.x=-Math.atan2(5.04,2.24); staircase.add(handrail);
   }
   roomHall.add(staircase);
@@ -2923,6 +3104,7 @@ function buildLevel3() {
 
   // Door to study
   const doorS = box(1.8, 2.6, 0.25, 0x3a2a22, 0, 1.3, -1.8);
+  doorS.material=manorWoodMaterial;
   doorS.userData.id="doorStudy"; doorS.userData.label="Door to Study — Crime Scene";
   interactables.push(doorS); roomHall.add(doorS);
   roomHall.add(box(2.3,3,0.16,0x7e5c3e,0,1.52,-1.98));
@@ -3333,6 +3515,9 @@ function animate() {
       p.scale.setScalar(s);
     });
     waterRipples.forEach(ripple=>{
+      ripple.position.x+=dt*0.28;
+      if(ripple.position.x>5) ripple.position.x=-6.5;
+      ripple.position.z=13+Math.sin(((ripple.position.x+7)/0.85)*0.55)*0.55;
       const pulse=0.78+Math.sin(t*1.5+ripple.userData.phase)*0.17;
       ripple.scale.setScalar(pulse); ripple.material.opacity=0.2+0.14*pulse;
     });
@@ -3440,15 +3625,15 @@ function startJourney(members=[]) {
   updateTeamUI();
   document.getElementById("introOverlay").classList.add("active");
   document.getElementById("introTitle").textContent = "LEVEL 1 — THE UNKNOWN";
-  document.getElementById("introText").textContent = "Find 4 clues before you can leave. Follow the field map, watch the firelight, and use E to handle items.";
+  document.getElementById("introText").textContent = "EASY · Find 4 clues, explore the forest, and vault the fallen trail log before leaving.";
 }
 function closeIntro() {
   document.getElementById("introOverlay").classList.remove("active");
   document.getElementById("gameCanvas").focus();
   onResize();
-  if (state.level === 1) showInstr("BRIEFING — LEVEL 1", "<b>Goal:</b> Find at least <b>4 clues</b> before leaving.<br><br>• <b>WASD</b> move · Drag to look<br>• Follow the live field map to the camp, hill, road and stream<br>• <b>F</b> flashlight · <b>SPACE</b> climb the hill or vault nearby timber<br>• Hold and use the signal flare with <b>E</b> if needed<br>• Click or tap the campsite, trees, road and footprints<br><br>Encounters are non-lethal: use the flashlight to hold the forest creature back. Watch the smoke. Follow the prints.");
-  else if (state.level === 2) showInstr("BRIEFING — LEVEL 2", "<b>Goal:</b> Uncover Project Echo — <b>4 clues</b>.<br><br>• Find the brass wall switch to light the museum<br>• Question the artifact, knight, dinosaur skeleton, and painted witness<br>• Search the curator's desk; click the portrait to talk or type <b>examine painting</b> to inspect it<br>• Use the flashlight or a signal flare to get past the non-lethal gallery wraith; press <b>SPACE</b> near the fallen display to vault it<br>• In team mode, pass the investigation between players; all discoveries are shared");
-  else showInstr("BRIEFING — LEVEL 3", "<b>Goal:</b> Prove innocence — <b>5 evidence</b> pieces.<br><br>• Find the wall switch and click it to light the hall<br>• Walk up the staircase to reach the portrait landing<br>• Enter the <b>Study</b> through the door and inspect the clock, letter and weapon<br>• Question Vale and Anna; check the security terminal<br>• If the intruder appears, hold and use the signal flare, vault the overturned table with <b>SPACE</b>, and reach the study door before the distraction ends<br>• Return to the hall, then type <b>prove my innocence</b>");
+  if (state.level === 1) showInstr("BRIEFING — LEVEL 1 · EASY", "<b>Goal:</b> Find at least <b>4 clues</b> and vault the single marked trail log before leaving.<br><br>• <b>WASD</b> move · Drag to look<br>• Follow the live field map to the camp, hill, road and stream<br>• <b>F</b> flashlight · <b>SPACE</b> climb the hill or vault the marked fallen log<br>• Hold and use the signal flare with <b>E</b> if needed<br>• Click or tap the campsite, trees, road and footprints<br><br>Encounters are non-lethal: use the flashlight to hold the forest creature back. Watch the smoke. Follow the prints.");
+  else if (state.level === 2) showInstr("BRIEFING — LEVEL 2 · MEDIUM", "<b>Goal:</b> Uncover Project Echo — <b>4 clues</b> — restore the lights and vault <b>two blocked gallery routes</b>.<br><br>• Find the brass wall switch to light the museum<br>• Question the artifact, knight, dinosaur skeleton, and painted witness<br>• Search the curator's desk; click the portrait to talk or type <b>examine painting</b> to inspect it<br>• Press <b>SPACE</b> while moving forward near the fallen display and toppled pedestal<br>• Use the flashlight or a signal flare to get past the faster non-lethal gallery wraith<br>• In team mode, pass the investigation between players; all discoveries are shared");
+  else showInstr("BRIEFING — LEVEL 3 · HARD", "<b>Goal:</b> Prove innocence — <b>5 evidence</b> pieces — restore the hall lights and vault <b>three obstacles</b> across the study and hall.<br><br>• Find the wall switch and click it to light the hall<br>• Walk up the staircase to reach the portrait landing<br>• Enter the <b>Study</b> through the door and inspect the clock, letter and weapon<br>• Question Vale and Anna; check the security terminal<br>• Use a signal flare to escape the faster intruder, vault the overturned study table, then return to the hall<br>• Vault the hall table and fallen chair before presenting your case<br>• Return to the hall, then type <b>prove my innocence</b>");
 }
 function toggleMenu(){document.getElementById("sideMenu").classList.toggle("open");}
 function restartLevel(){resetLevel(state.level);document.getElementById("sideMenu").classList.remove("open");addMsg("system","Restarted.");}
@@ -3486,6 +3671,16 @@ function updateUI() {
     lightButton.textContent=state.memory.flashlightOn?"🔦 LIGHT ON":"🔦 LIGHT";
     lightButton.setAttribute("aria-pressed",String(state.memory.flashlightOn));
   }
+  const phoneButton=document.getElementById("phoneQuickButton");
+  if(phoneButton) {
+    phoneButton.textContent=phonePoweredOn?"📱 PHONE":"📱 POWER ON";
+    phoneButton.setAttribute("aria-label",phonePoweredOn?"Open field phone":"Power on field phone");
+  }
+  const phonePowerButton=document.getElementById("phonePowerButton");
+  if(phonePowerButton) {
+    phonePowerButton.setAttribute("aria-label",phonePoweredOn?"Power off field phone":"Power on field phone");
+    phonePowerButton.title=phonePoweredOn?"Power off field phone":"Power on field phone";
+  }
   const mapHud=document.getElementById("mapHud");
   if(mapHud) mapHud.hidden=state.level!==1;
   updateTeamUI();
@@ -3503,6 +3698,8 @@ function addMsg(type,text,name){
 
 function resetLevel(lvl) {
   if (!document.getElementById("phoneChatOverlay").hidden) endConversation();
+  phonePoweredOn=true;
+  document.querySelector(".game-layout")?.classList.remove("phone-powered-off");
   clearHeldTool();
   if(phoneRig) phoneRig.visible=false;
   phoneRigOpen=false;
@@ -3515,7 +3712,7 @@ function resetLevel(lvl) {
   state.requiredClues = lvl===1?4:lvl===2?4:5;
   document.getElementById("chatLog").innerHTML="";
   if (lvl===1) {
-    Object.assign(state.memory,{foundObject:false,campExamined:false,climbedHill:false,roadExamined:false,treesExamined:false,streamUsed:false,messagesRead:0,flashlightOn:false});
+    Object.assign(state.memory,{foundObject:false,campExamined:false,climbedHill:false,roadExamined:false,treesExamined:false,streamUsed:false,trailObstacleCleared:false,messagesRead:0,flashlightOn:false});
     buildLevel1();
     state.health=85;state.food=3;state.water=2.5;state.safety=60;state.info=10;
     state.location="Unknown Wilderness";
@@ -3527,12 +3724,12 @@ function resetLevel(lvl) {
       {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"},
       {id:"flare",name:"🟠 Signal Flare",uses:2,desc:"Bright, non-harmful distraction · E to use"}
     ];
-    state.objectives=[{text:"Orient yourself",done:false},{text:"Investigate campsite",done:false},{text:"Hill or road",done:false},{text:"Clues 0/4",done:false}];
+    state.objectives=[{text:"Orient yourself",done:false},{text:"Investigate campsite",done:false},{text:"Hill or road",done:false},{text:"Vault the fallen log on the trail",done:false},{text:"Clues 0/4",done:false}];
     setScene("Use the field map to find the stream, hill, camp and road. Follow the footprints.");
     addMsg("system","You wake with almost no memory.");
     addMsg("warning",'"Don\'t follow the smoke."');
   } else if (lvl===2) {
-    Object.assign(state.memory,{askedArtifact:false,askedKnight:false,askedDino:false,portraitQuestioned:false,paintingSeen:false,deskSearched:false,doorOpened:false});
+    Object.assign(state.memory,{askedArtifact:false,askedKnight:false,askedDino:false,portraitQuestioned:false,paintingSeen:false,deskSearched:false,doorOpened:false,museumPowerRestored:false,galleryObstacleCleared:false,galleryPedestalCleared:false});
     buildLevel2();
     state.health=95;state.food=3;state.water=3;state.safety=70;state.info=25;
     state.location="Museum — Egyptian Wing";
@@ -3544,11 +3741,11 @@ function resetLevel(lvl) {
       {id:"flare",name:"🟠 Signal Flare",uses:1,desc:"Bright, non-harmful distraction · E to use"}
     ];
     if(state.memory.foundObject){state.inventory.push({id:"key",name:"🗝️ Strange Key",uses:1,desc:"Chamber"});state.inventory.push({id:"journal",name:"📜 Torn Journal",uses:1,desc:"Warning"});}
-    state.objectives=[{text:"Question exhibits",done:false},{text:"Search desk",done:false},{text:"Project Echo",done:false},{text:"Clues 0/4",done:false}];
-    setScene("Find the brass wall switch to light the museum, then inspect the exhibits.");
+    state.objectives=[{id:"restorePower",text:"Restore power at the wall switch",done:state.memory.museumPowerRestored},{text:"Question exhibits",done:false},{text:"Search desk",done:false},{text:"Project Echo",done:false},{text:"Vault the fallen gallery display",done:false},{text:"Vault the toppled exhibit pedestal",done:false},{text:"Clues 0/4",done:false}];
+    setScene("Find the brass wall switch to light the museum, then clear both blocked gallery routes.");
     addMsg("system","Doors sealed. Exhibits are conscious.");
   } else {
-    Object.assign(state.memory,{clockOpened:false,sceneExamined:false,valeQuestioned:false,annaQuestioned:false,cctvChecked:false,inStudy:false,portraitQuestioned:false});
+    Object.assign(state.memory,{clockOpened:false,sceneExamined:false,valeQuestioned:false,annaQuestioned:false,cctvChecked:false,inStudy:false,portraitQuestioned:false,manorPowerRestored:false,manorHallTableCleared:false,manorHallChairCleared:false});
     buildLevel3();
     state.health=100;state.food=3;state.water=3;state.safety=45;state.info=20;
     state.location="Blackwood Manor — Grand Hall";
@@ -3560,9 +3757,9 @@ function resetLevel(lvl) {
       {id:"flare",name:"🟠 Signal Flare",uses:2,desc:"Bright, non-harmful distraction · E to use"}
     ];
     if(state.memory.foundObject) state.inventory.push({id:"key",name:"🗝️ Strange Key",uses:1,desc:"Echo link"});
-    state.objectives=[{text:"Enter study",done:false},{text:"Question Vale & Anna",done:false},{text:"CCTV",done:false},{text:"Evidence 0/5",done:false}];
+    state.objectives=[{id:"restorePower",text:"Restore power in the grand hall",done:state.memory.manorPowerRestored},{text:"Enter study",done:false},{text:"Question Vale & Anna",done:false},{text:"CCTV",done:false},{text:"Vault the hall table",done:false},{text:"Vault the fallen hall chair",done:false},{text:"Vault the overturned table in the study",done:false},{text:"Evidence 0/5",done:false}];
     setScene("Find the wall switch, inspect the hall, and walk up the staircase to the portrait landing.");
-    addMsg("system","You are the primary suspect. Enter the study. Build the case.");
+    addMsg("system","Hard case: restore the lights, escape the intruder, and vault three obstacles across the study and hall.");
   }
   updateUI(); onResize(); startLevelMusic(lvl);
 }
@@ -3593,7 +3790,12 @@ function sendCommand() {
     if(/where|direction/.test(c)){addMsg("ai","Smoke north, hill west, road east, water south. Find 4 clues. Type 'help' for commands.");return;}
     addMsg("ai","I didn't recognize that action. Type 'help' to see commands for this level.");
   } else if(state.level===2){
-    if(/leave|ready|understand|continue/.test(c)&&state.clues.length>=state.requiredClues){
+    if(/leave|ready|understand|continue/.test(c)){
+      if(state.clues.length<state.requiredClues){addMsg("warning",`Gather ${state.requiredClues} clues before leaving. You have ${state.clues.length}.`);return;}
+      if(!state.memory.museumPowerRestored){addMsg("warning","Restore power with the brass wall switch before leaving the museum.");return;}
+      if(!state.memory.galleryObstacleCleared||!state.memory.galleryPedestalCleared){
+        addMsg("warning","Vault both the fallen display and toppled exhibit pedestal with SPACE to clear the gallery route.");return;
+      }
       if(encounterState.active&&!encounterState.cleared){addMsg("warning","The gallery wraith still blocks the exit. Use the flashlight or a flare before leaving.");return;}
       state.levelComplete=true;addMsg("system","— LEVEL 2 COMPLETE —");setTimeout(()=>showScore(2),1200);return;
     }
@@ -3623,10 +3825,10 @@ function sendCommand() {
 }
 function showCommandHelp() {
   const instructions = state.level===1
-    ? "Level 1: examine camp, road, trees, or stream; use phone or compass; climb the hill; press Space near fallen timber to vault it. Hold the flashlight on the forest creature or use a signal flare, then leave after finding 4 clues."
+    ? "Level 1 (easy): examine camp, road, trees, or stream; use phone or compass; climb the hill; vault the marked trail log with Space. Hold the flashlight on the forest creature or use a signal flare, then leave after finding 4 clues."
     : state.level===2
-    ? "Level 2: click the Egyptian artifact, knight, dinosaur, or painting to open its field-phone chat. Ask in your own words or tap a suggested question. Examine the curator desk, use the flashlight or signal flare to get past the wraith, and leave after finding 4 clues. Press Space near the fallen display to vault it."
-    : "Level 3: enter the study; examine the clock, letter, or weapon; click Vale, Anna, or the portrait to open a private field-phone chat. Ask follow-ups or request a recap, then check CCTV. If the intruder appears, hold and use the signal flare, press Space near the overturned table, reach the study door, and return to the hall before proving your innocence.";
+    ? "Level 2 (medium): click the Egyptian artifact, knight, dinosaur, or painting to open its field-phone chat. Ask in your own words or tap a suggested question. Examine the curator desk, use the flashlight or signal flare to get past the wraith, and leave after finding 4 clues. Restore power and vault both the fallen display and toppled pedestal with Space."
+    : "Level 3 (hard): enter the study; examine the clock, letter, or weapon; click Vale, Anna, or the portrait to open a private field-phone chat. Ask follow-ups or request a recap, then check CCTV. Use a signal flare to distract the intruder, vault the study table and two hall obstacles, reach the study door, and return to the lit hall before proving your innocence.";
   const teamTip = investigationTeam.members.length > 1 ? ` Team mode: press PASS TO NEXT or P to hand over the shared investigation.` : "";
   addMsg("ai",instructions + teamTip);
 }
@@ -3676,10 +3878,10 @@ function showScore(level) {
 }
 function startLevel(lvl) {
   document.getElementById("introOverlay").classList.add("active");
-  document.getElementById("introTitle").textContent=lvl===2?"LEVEL 2 — MUSEUM AFTER DARK":"LEVEL 3 — THE FINAL CASE";
+  document.getElementById("introTitle").textContent=lvl===2?"LEVEL 2 — MUSEUM AFTER DARK · MEDIUM":"LEVEL 3 — THE FINAL CASE · HARD";
   document.getElementById("introText").textContent=lvl===2
-    ?"Night. Find the wall switch, light the museum, and uncover 4 clues about Project Echo."
-    :"Find the hall switch, climb the staircase, and gather 5 pieces of evidence to prove your innocence.";
+    ?"MEDIUM · Restore power, outmaneuver the gallery wraith, vault two blocked routes, and uncover 4 clues about Project Echo."
+    :"HARD · Restore power, escape the intruder, vault three obstacles across the study and hall, and gather 5 pieces of evidence.";
   resetLevel(lvl);
 }
 document.getElementById("playerCount").addEventListener("change",refreshTeamFields);

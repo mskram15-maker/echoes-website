@@ -269,6 +269,13 @@ body {
   min-height: 620px;
   max-height: 100dvh;
 }
+.game-layout.phone-powered-off {
+  grid-template-columns:minmax(0,1fr);
+  grid-template-rows:minmax(0,1fr);
+  height:100dvh;
+  min-height:100dvh;
+}
+.game-layout.phone-powered-off .ai-panel { display:none; }
 
 .env-panel {
   background: linear-gradient(180deg, #101718, #090e0f);
@@ -881,6 +888,13 @@ body {
   font-weight: 600;
   letter-spacing: 0.04em;
 }
+.phone-status-controls { display:flex;align-items:center;gap:0.5rem; }
+.phone-power-button {
+  width:24px;height:24px;padding:0;border:1px solid rgba(211,231,220,0.3);
+  border-radius:50%;background:rgba(7,20,17,0.42);color:#eaf2eb;
+  font:600 0.9rem var(--font-body);line-height:1;cursor:pointer;
+}
+.phone-power-button:hover { border-color:#cfe3c7;background:rgba(110,157,119,0.32); }
 .phone-header {
   display: flex;
   align-items: center;
