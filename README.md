@@ -9,7 +9,7 @@ ECHOES is a browser-based, first-person mystery adventure built around three con
 | | |
 | --- | --- |
 | **Genre** | First-person mystery and exploration |
-| **Levels** | The Unknown · Museum After Dark · The Final Case |
+| **Levels** | The Unknown (Easy) · Museum After Dark (Medium) · The Final Case (Hard) |
 | **Runs on** | Modern browsers with WebGL support |
 | **Built with** | HTML, CSS, JavaScript, Three.js, and Vite |
 | **Hosting** | Netlify-ready static site |
@@ -74,7 +74,17 @@ npm run preview
 
 Equip the paper map to see a live top-down view of your current level, or equip the compass to read its moving north needle. The phone's **Messages** app decrypts field dispatches in Level 1; in later levels, it opens local witness channels. **Field Map**, **Compass**, and **Case File** remain available as phone apps. The ⏻ button in the phone status bar powers the screen off; the held phone goes dark and the side panel hides until you use **POWER ON**. In Levels 2 and 3, find and use the wall switch before entering the next stage. Vault the marked fallen obstacles with **Space** while moving forward. Walk up the staircase in the manor to inspect the upper landing. When you see **click to talk**, interact with a character to open their phone conversation. Choose a suggested question or type naturally into the message box. Close the phone with its × button or **Escape**. Use **STOP MUSIC** and **PLAY MUSIC** to control the soundtrack.
 
-The cases grow harder as you progress: the forest is **easy** and asks you to vault one marked log; the museum is **medium**, adds a second gallery obstacle and a faster wraith; the manor is **hard**, with three required vaults, a faster intruder, and a timed escape. All traversal obstacles must be cleared before finishing their level. Encounters are designed as non-lethal escape challenges, not combat. In Levels 1 and 2, aim and hold the flashlight on the approaching presence until the route is clear; a signal flare is another limited-use escape aid. In Level 3, use a flare to distract the intruder, vault the overturned study table with **Space**, and reach the study door before the distraction ends. Then vault the two obstacles in the hall before presenting your case. Threats pause while you review clues or use the field phone. If a threat catches you, that level restarts; clues and progress from other levels are retained.
+### Challenge progression
+
+Each case adds traversal and encounter pressure. You must clear every listed obstacle, meet the evidence requirement, and satisfy the level-specific objective before you can finish.
+
+| Level | Difficulty | Required challenges to finish |
+| --- | --- | --- |
+| **1 · The Unknown** | Easy | Find **4 clues** and vault the **fallen trail log**. If the forest creature engages, use the flashlight or a limited-use flare to create space. |
+| **2 · Museum After Dark** | Medium | Find **4 clues**, restore power at the wall switch, and vault the **fallen display** and **toppled pedestal**. The gallery wraith approaches faster than the Level 1 threat; use the flashlight or a flare to make a safe route. |
+| **3 · The Final Case** | Hard | Gather **5 pieces of evidence**, restore hall power, and vault **three obstacles**: the overturned study table, hall table, and fallen hall chair. The faster intruder requires a timed flare distraction to escape the study before you can return to the hall and present your case. |
+
+Encounters are non-lethal escape challenges, not combat. Threats pause while you review clues or use the field phone. If a threat catches you, that level restarts; clues and progress from other levels are retained.
 
 ## The three cases
 
