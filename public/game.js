@@ -216,7 +216,7 @@ function setupControls() {
     if (e.repeat) return;
     if (e.code === "KeyF") toggleFlashlight();
     if (e.code === "Space") tryVaultOrClimb();
-    if (e.code === "KeyE") equippedItemId && ["food","water","meds","flare","ward","spray"].includes(equippedItemId) ? useEquippedItem() : toggleGrab();
+    if (e.code === "KeyE") equippedItemId && ["food","water","meds","flare","ward","spray","repeller"].includes(equippedItemId) ? useEquippedItem() : toggleGrab();
     if (e.code === "KeyP" && investigationTeam.members.length > 1) passInvestigator();
   });
   peopleMeshes.forEach(person => {
@@ -813,6 +813,19 @@ function equipHeldItem(id) {
       new THREE.MeshStandardMaterial({color:0xd9bd7a,metalness:0.8,roughness:0.24}));
     cap.position.set(0.025,0.12,-0.266);
     heldToolRig.add(cap);
+  } else if (id==="repeller") {
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.12,0.35,18),
+      new THREE.MeshStandardMaterial({color:0x344c50,metalness:0.58,roughness:0.32}));
+    body.rotation.x=-Math.PI/2;body.position.set(0.04,0.06,-0.28);heldToolRig.add(body);
+    const emitterRing=new THREE.Mesh(new THREE.TorusGeometry(0.105,0.025,10,24),
+      new THREE.MeshStandardMaterial({color:0x8be4dd,emissive:0x39cbbc,emissiveIntensity:0.85,metalness:0.28,roughness:0.2}));
+    emitterRing.position.set(0.04,0.06,-0.48);heldToolRig.add(emitterRing);
+    const grip=new THREE.Mesh(new THREE.CylinderGeometry(0.047,0.055,0.19,12),
+      new THREE.MeshStandardMaterial({color:0x202c30,metalness:0.42,roughness:0.48}));
+    grip.rotation.x=-Math.PI/2;grip.position.set(0.04,0.06,-0.04);heldToolRig.add(grip);
+    const statusLight=new THREE.Mesh(new THREE.SphereGeometry(0.035,10,8),
+      new THREE.MeshBasicMaterial({color:0x8effd8}));
+    statusLight.position.set(0.04,0.15,-0.2);heldToolRig.add(statusLight);
   } else if (id==="flare") {
     const body=new THREE.Mesh(new THREE.CylinderGeometry(0.048,0.062,0.34,14),
       new THREE.MeshStandardMaterial({color:0xb83f2d,roughness:0.48,metalness:0.16}));
@@ -831,10 +844,22 @@ function unequipHeldItem() {
   updateUI();
 }
 function useEquippedItem() {
-  if (!equippedItemId || !["food","water","meds","flare","ward","spray"].includes(equippedItemId)) return false;
+  if (!equippedItemId || !["food","water","meds","flare","ward","spray","repeller"].includes(equippedItemId)) return false;
   const item=state.inventory.find(i=>i.id===equippedItemId);
   if (!item || item.uses<=0) { addMsg("system","There is none left to use."); return true; }
-  if(equippedItemId==="flare") {
+  if(equippedItemId==="repeller") {
+    if(!encounterState.active||encounterState.cleared||!encounterState.threat) {
+      addMsg("system","No threat nearby. The Echo Pulse charge was saved.");
+      return true;
+    }
+    item.uses--;
+    const retreatMessages={
+      1:"The Echo Pulse rings through the trees. The creature recoils and disappears into the forest.",
+      2:"A low Echo Pulse rolls through the gallery. The ghost dissolves away without harm.",
+      3:"The Echo Pulse ripples through the hall. The intruder retreats into the darkness, unharmed."
+    };
+    clearEncounter(retreatMessages[state.level]);
+  } else if(equippedItemId==="flare") {
     item.uses--;
     if(encounterState.active&&!encounterState.cleared) {
       encounterState.distractedUntil=performance.now()/1000+8;
@@ -897,13 +922,14 @@ function useItemById(id) {
   const item = state.inventory.find(i => i.id === id);
   if (!item) return;
   if (id === "flashlight") { toggleFlashlight(); return; }
-  if (["food","water","meds","flare","ward","spray"].includes(id)) {
+  if (["food","water","meds","flare","ward","spray","repeller"].includes(id)) {
     if(equippedItemId===id) { unequipHeldItem(); return; }
     equipHeldItem(id);
     const instructions=id==="flare"
       ?"Press E or USE FLARE to create a bright, non-harmful distraction."
       :id==="ward"?"Press E or USE WARD to repel an apparition without harming it."
       :id==="spray"?"Aim at a nearby threat and press E or USE SPRAY to freeze it briefly."
+      :id==="repeller"?"Press E or USE PULSE to make a nearby threat retreat."
       :"Press E or USE to consume it.";
     addMsg("system",`You hold ${item.name.replace(/^\S+\s*/,"")}. ${instructions}`);
     updateUI();
@@ -3575,8 +3601,8 @@ function checkHover() {
 function updateActionButton() {
   const actionButton=document.getElementById("actionButton");
   if (!actionButton) return;
-  actionButton.textContent=equippedItemId&&["food","water","meds","flare","ward","spray"].includes(equippedItemId)
-    ? equippedItemId==="flare"?"USE FLARE":equippedItemId==="ward"?"USE WARD":"USE "+equippedItemId.toUpperCase()
+  actionButton.textContent=equippedItemId&&["food","water","meds","flare","ward","spray","repeller"].includes(equippedItemId)
+    ? equippedItemId==="flare"?"USE FLARE":equippedItemId==="ward"?"USE WARD":equippedItemId==="repeller"?"USE PULSE":"USE "+equippedItemId.toUpperCase()
     : heldObject?"DROP":currentHover&&currentHover.userData.id==="wallSwitch"?"SWITCH"
     :currentHover&&currentHover.userData.grabbable?"PICK UP"
     :currentHover&&characterChatbots[currentHover.userData.id]?"TALK":"INSPECT";
@@ -3870,9 +3896,9 @@ function closeIntro() {
   document.getElementById("introOverlay").classList.remove("active");
   document.getElementById("gameCanvas").focus();
   onResize();
-  if (state.level === 1) showInstr("BRIEFING — LEVEL 1 · EASY", "<b>Goal:</b> Find at least <b>4 clues</b> and vault the single marked trail log before leaving.<br><br>• <b>WASD</b> move · Drag to look<br>• Follow the live field map to the camp, hill, road and stream<br>• <b>F</b> flashlight · <b>SPACE</b> climb the hill or vault the marked fallen log<br>• Hold and use the signal flare with <b>E</b> if needed<br>• Click or tap the campsite, trees, road and footprints<br><br>Encounters are non-lethal: use the flashlight to hold the forest creature back. Watch the smoke. Follow the prints.");
-  else if (state.level === 2) showInstr("BRIEFING — LEVEL 2 · MEDIUM", "<b>Goal:</b> Uncover Project Echo — <b>4 clues</b> — restore the lights and vault <b>two blocked gallery routes</b>.<br><br>• Find the brass wall switch to light the museum<br>• Question the artifact, knight, dinosaur skeleton, and painted witness<br>• Search the curator's desk; click the portrait to talk or type <b>examine painting</b> to inspect it<br>• Press <b>SPACE</b> while moving forward near the fallen display and toppled pedestal<br>• Drive off both ghosts: aim the flashlight, use the UV repeller, or spray the salt-mist can at a nearby ghost and press <b>E</b> to freeze it for 4.5 seconds. The faster second ghost appears when the first vanishes.<br>• In team mode, pass the investigation between players; all discoveries are shared");
-  else showInstr("BRIEFING — LEVEL 3 · HARD", "<b>Goal:</b> Prove innocence — <b>5 evidence</b> pieces — restore the hall lights and vault <b>four obstacles</b> across the study and hall.<br><br>• Find the wall switch and click it to light the hall<br>• Walk up the staircase to reach the portrait landing<br>• Enter the <b>Study</b> through the door and inspect the clock, letter and weapon<br>• Question Vale and Anna; check the security terminal<br>• Use a signal flare to distract the faster intruder or aim the restraint-foam can at them to pin them safely for 4.5 seconds; vault the overturned study table, then return to the hall<br>• Vault the hall table, fallen chair, and shattered chandelier before presenting your case<br>• Return to the hall, then type <b>prove my innocence</b>");
+  if (state.level === 1) showInstr("BRIEFING — LEVEL 1 · EASY", "<b>Goal:</b> Find at least <b>4 clues</b> and vault the single marked trail log before leaving.<br><br>• <b>WASD</b> move · Drag to look<br>• Follow the live field map to the camp, hill, road and stream<br>• <b>F</b> flashlight · <b>SPACE</b> climb the hill or vault the marked fallen log<br>• Use the Echo Pulse to send the creature away, or hold the signal flare with <b>E</b><br>• Click or tap the campsite, trees, road and footprints<br><br>Encounters are non-lethal. Watch the smoke. Follow the prints.");
+  else if (state.level === 2) showInstr("BRIEFING — LEVEL 2 · MEDIUM", "<b>Goal:</b> Uncover Project Echo — <b>4 clues</b> — restore the lights and vault <b>two blocked gallery routes</b>.<br><br>• Find the brass wall switch to light the museum<br>• Question the artifact, knight, dinosaur skeleton, and painted witness<br>• Search the curator's desk; click the portrait to talk or type <b>examine painting</b> to inspect it<br>• Press <b>SPACE</b> while moving forward near the fallen display and toppled pedestal<br>• Use the two-charge Echo Pulse to send both ghosts away, or aim the flashlight, use the UV repeller, or spray the salt-mist can at a nearby ghost and press <b>E</b> to freeze it for 4.5 seconds. The faster second ghost appears when the first vanishes.<br>• In team mode, pass the investigation between players; all discoveries are shared");
+  else showInstr("BRIEFING — LEVEL 3 · HARD", "<b>Goal:</b> Prove innocence — <b>5 evidence</b> pieces — restore the hall lights and vault <b>four obstacles</b> across the study and hall.<br><br>• Find the wall switch and click it to light the hall<br>• Walk up the staircase to reach the portrait landing<br>• Enter the <b>Study</b> through the door and inspect the clock, letter and weapon<br>• Question Vale and Anna; check the security terminal<br>• Use the Echo Pulse to send the intruder away, or use a signal flare to distract them or pin them safely with restraint foam for 4.5 seconds; vault the overturned study table, then return to the hall<br>• Vault the hall table, fallen chair, and shattered chandelier before presenting your case<br>• Return to the hall, then type <b>prove my innocence</b>");
 }
 function toggleMenu(){document.getElementById("sideMenu").classList.toggle("open");}
 function restartLevel(){resetLevel(state.level);document.getElementById("sideMenu").classList.remove("open");addMsg("system","Restarted.");}
@@ -3891,7 +3917,7 @@ function updateUI() {
   document.getElementById("sdgRuleLabel").textContent = sdgRule.label;
   document.getElementById("sdgRuleText").textContent = sdgRule.rule;
   document.getElementById("inventory").innerHTML = state.inventory.map(i=>{
-    const hl=/key|journal|flashlight|flare|ward|spray/i.test(i.id)?" highlight":"";
+    const hl=/key|journal|flashlight|flare|ward|spray|repeller/i.test(i.id)?" highlight":"";
     const selected=equippedItemId===i.id?" selected":"";
     const uses=Number.isFinite(i.uses)?`<small>×${i.uses}</small>`:"";
     return `<button type="button" class="inv-item${hl}${selected}" title="${i.desc}" aria-pressed="${equippedItemId===i.id}" onclick="useItemById('${i.id}')"><span>${i.name}</span>${uses}</button>`;
@@ -3963,7 +3989,8 @@ function resetLevel(lvl) {
       {id:"phone",name:"📱 Phone",uses:5,desc:"Messages, live map, compass & case file"},
       {id:"map",name:"🗺️ Map",uses:Infinity,desc:"Hold a live map of your current level"},
       {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"},
-      {id:"flare",name:"🟠 Signal Flare",uses:2,desc:"Bright, non-harmful distraction · E to use"}
+      {id:"flare",name:"🟠 Signal Flare",uses:2,desc:"Bright, non-harmful distraction · E to use"},
+      {id:"repeller",name:"🌀 Echo Pulse",uses:1,desc:"A non-harmful pulse that sends a nearby threat away · E to use"}
     ];
     state.objectives=[{text:"Orient yourself",done:false},{text:"Investigate campsite",done:false},{text:"Hill or road",done:false},{text:"Vault the fallen log on the trail",done:false},{text:"Clues 0/4",done:false}];
     setScene("Use the field map to find the stream, hill, camp and road. Follow the footprints.");
@@ -3981,7 +4008,8 @@ function resetLevel(lvl) {
       {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"},
       {id:"flare",name:"🟠 Signal Flare",uses:1,desc:"Bright, non-harmful distraction · E to use"},
       {id:"ward",name:"🛡️ UV Repeller",uses:2,desc:"Repels one apparition without harm · E to use"},
-      {id:"spray",name:"🧂 Salt Mist Can",uses:3,desc:"Aim at a nearby ghost or intruder and freeze it for 4.5 seconds"}
+      {id:"spray",name:"🧂 Salt Mist Can",uses:3,desc:"Aim at a nearby ghost or intruder and freeze it for 4.5 seconds"},
+      {id:"repeller",name:"🌀 Echo Pulse",uses:2,desc:"A non-harmful pulse that sends a nearby ghost away · E to use"}
     ];
     if(state.memory.foundObject){state.inventory.push({id:"key",name:"🗝️ Strange Key",uses:1,desc:"Chamber"});state.inventory.push({id:"journal",name:"📜 Torn Journal",uses:1,desc:"Warning"});}
     state.objectives=[{id:"restorePower",text:"Restore power at the wall switch",done:state.memory.museumPowerRestored},{text:"Question exhibits",done:false},{text:"Search desk",done:false},{text:"Project Echo",done:false},{text:"Vault the fallen gallery display",done:false},{text:"Vault the toppled exhibit pedestal",done:false},{text:"Drive off both gallery ghosts",done:false},{text:"Clues 0/4",done:false}];
@@ -3998,7 +4026,8 @@ function resetLevel(lvl) {
       {id:"map",name:"🗺️ Map",uses:Infinity,desc:"Hold a live manor floor plan"},
       {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"},
       {id:"flare",name:"🟠 Signal Flare",uses:2,desc:"Bright, non-harmful distraction · E to use"},
-      {id:"spray",name:"🧊 Restraint Foam Can",uses:2,desc:"Aim at the intruder to pin it safely for 4.5 seconds"}
+      {id:"spray",name:"🧊 Restraint Foam Can",uses:2,desc:"Aim at the intruder to pin it safely for 4.5 seconds"},
+      {id:"repeller",name:"🌀 Echo Pulse",uses:1,desc:"A non-harmful pulse that makes the intruder retreat · E to use"}
     ];
     if(state.memory.foundObject) state.inventory.push({id:"key",name:"🗝️ Strange Key",uses:1,desc:"Echo link"});
     state.objectives=[{id:"restorePower",text:"Restore power in the grand hall",done:state.memory.manorPowerRestored},{text:"Enter study",done:false},{text:"Question Vale & Anna",done:false},{text:"CCTV",done:false},{text:"Vault the hall table",done:false},{text:"Vault the fallen hall chair",done:false},{text:"Vault the fallen chandelier",done:false},{text:"Vault the overturned table in the study",done:false},{text:"Evidence 0/5",done:false}];
@@ -4022,6 +4051,11 @@ function sendCommand() {
   if(/eat|food/.test(c)){useItemById("food");return;}
   if(/drink|water/.test(c)){useItemById("water");return;}
   if(/med|heal/.test(c)){useItemById("meds");return;}
+  if(/\b(?:echo\s*pulse|repeller|pulse)\b/.test(c)){
+    if(equippedItemId!=="repeller") equipHeldItem("repeller");
+    useEquippedItem();
+    return;
+  }
   if(/phone|message/.test(c)){useItemById("phone");return;}
   if(/compass/.test(c)){useItemById("compass");return;}
   if(state.level===1){
@@ -4069,10 +4103,10 @@ function sendCommand() {
 }
 function showCommandHelp() {
   const instructions = state.level===1
-    ? "Level 1 (easy): examine camp, road, trees, or stream; use phone or compass; climb the hill; vault the marked trail log with Space. Hold the flashlight on the forest creature or use a signal flare, then leave after finding 4 clues."
+    ? "Level 1 (easy): examine camp, road, trees, or stream; use phone or compass; climb the hill; vault the marked trail log with Space. Use the Echo Pulse or signal flare, or hold the flashlight on the forest creature, then leave after finding 4 clues."
     : state.level===2
-    ? "Level 2 (medium): click the Egyptian artifact, knight, dinosaur, or painting to open its field-phone chat. Ask in your own words or tap a suggested question. Examine the curator desk, repel both ghosts with the flashlight or UV repeller, or aim the salt-mist can at a nearby ghost and press E to freeze it for 4.5 seconds. Restore power, vault both blocked routes, and find 4 clues."
-    : "Level 3 (hard): enter the study; examine the clock, letter, or weapon; click Vale, Anna, or the portrait to open a private field-phone chat. Ask follow-ups or request a recap, then check CCTV. Use a signal flare or restraint foam to safely pin the nearby intruder for 4.5 seconds; vault the study table and three hall obstacles (including the shattered chandelier), reach the study door, and return to the lit hall before proving your innocence.";
+    ? "Level 2 (medium): click the Egyptian artifact, knight, dinosaur, or painting to open its field-phone chat. Ask in your own words or tap a suggested question. Examine the curator desk; the two-charge Echo Pulse can send both ghosts away, or use the flashlight, UV repeller, or salt-mist can. Restore power, vault both blocked routes, and find 4 clues."
+    : "Level 3 (hard): enter the study; examine the clock, letter, or weapon; click Vale, Anna, or the portrait to open a private field-phone chat. Ask follow-ups or request a recap, then check CCTV. Use the Echo Pulse to make the intruder retreat, or use a signal flare or restraint foam to create a safe escape window; vault the study table and three hall obstacles (including the shattered chandelier), reach the study door, and return to the lit hall before proving your innocence.";
   const teamTip = investigationTeam.members.length > 1 ? ` Team mode: press PASS TO NEXT or P to hand over the shared investigation.` : "";
   addMsg("ai",instructions + teamTip);
 }

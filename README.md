@@ -31,6 +31,7 @@ ECHOES is a browser-based, first-person mystery adventure built around three con
 - Move with smoother acceleration and braking; Level 1 has a quicker walking pace, and **Shift** lets you sprint.
 - Use the field phone's apps while the investigation sidebar is hidden; close it with **CLOSE PHONE**, **×**, clicking outside, or **Escape** to restore the sidebar and holster the phone.
 - Face non-lethal encounters: repel the forest creature, drive off two increasingly aggressive museum ghosts with a flashlight, signal flare, limited-use UV repeller, or salt-mist can, and escape the manor intruder.
+- Carry the Echo Pulse in every level: equip it from inventory or tap **PULSE**, then press **E** or **USE PULSE** to send a nearby creature, ghost, or intruder away without harm. It has one charge in Levels 1 and 3, and two in Level 2 for the two ghosts.
 - Spray the limited-use salt-mist can at a nearby Level 2 ghost to freeze it for 4.5 seconds; aim carefully to save charges. In the manor, use a flare or a limited-use restraint-foam can to create a safe, temporary escape window.
 - Explore the museum's rebuilt dinosaur skeleton, with a more complete rib cage, skull, teeth, joints, limbs, and tail.
 - Vault fallen timber, gallery debris, overturned manor furniture, and a shattered chandelier; being caught restarts the current level.
@@ -70,7 +71,8 @@ npm run preview
 | Pick up or drop an object / use a held item | **E** |
 | Hold a food, water, medical kit, or flare | Select it in inventory or use the **FLARE** control |
 | Hold a UV repeller in Level 2 | Select **UV Repeller** in inventory |
-| Use the held food, water, medical kit, flare, UV repeller, or salt-mist can | **E** or the on-screen action button |
+| Use the held food, water, medical kit, flare, UV repeller, salt-mist can, or Echo Pulse | **E** or the on-screen action button |
+| Hold the Echo Pulse repeller | Tap **PULSE** or select **Echo Pulse** in inventory |
 | Equip a map or compass | Select it in your inventory |
 | Open the field phone | **PHONE** button or select the phone in your inventory |
 | Stop using or put away the phone | Use **×**, click outside the phone, press **Escape**, or click **PUT AWAY** |
@@ -80,7 +82,7 @@ npm run preview
 | Ask for suggestions | Type **help** in the command box |
 | Pass the co-op turn | **P** or **PASS TO NEXT** |
 
-Equip the paper map to see a live top-down view of your current level, or equip the compass to read its moving north needle. The phone's **Messages** app decrypts field dispatches in Level 1; in later levels, it opens local witness channels. **Field Map**, **Compass**, and **Case File** remain available as phone apps. While the phone is open, its apps replace the investigation sidebar; close it with the visible **CLOSE PHONE** control, **×**, clicking outside, or **Escape** to restore the sidebar and your previous held tool. The ⏻ button powers the phone screen off; use **POWER ON** to turn it back on. In Level 2, aim the salt-mist can at a nearby ghost and press **E** to freeze it for 4.5 seconds; in Level 3, the restraint-foam can briefly pins the intruder safely. Missed sprays do not consume a charge. Find and use the wall switch before entering the next stage. Vault the marked fallen obstacles with **Space** while moving forward. Walk up the staircase in the manor to inspect the upper landing. When you see **click to talk**, interact with a character to open their phone conversation. Choose a suggested question or type naturally into the message box. Use **STOP MUSIC** and **PLAY MUSIC** to control the soundtrack.
+Equip the paper map to see a live top-down view of your current level, or equip the compass to read its moving north needle. The phone's **Messages** app decrypts field dispatches in Level 1; in later levels, it opens local witness channels. **Field Map**, **Compass**, and **Case File** remain available as phone apps. While the phone is open, its apps replace the investigation sidebar; close it with the visible **CLOSE PHONE** control, **×**, clicking outside, or **Escape** to restore the sidebar and your previous held tool. The ⏻ button powers the phone screen off; use **POWER ON** to turn it back on. Use the held Echo Pulse with **E** or **USE PULSE** to send the current encounter threat away safely; the Level 2 pulse has two charges, one for each ghost. In Level 2, aim the salt-mist can at a nearby ghost and press **E** to freeze it for 4.5 seconds; in Level 3, the restraint-foam can briefly pins the intruder safely. Missed sprays do not consume a charge. Find and use the wall switch before entering the next stage. Vault the marked fallen obstacles with **Space** while moving forward. Walk up the staircase in the manor to inspect the upper landing. When you see **click to talk**, interact with a character to open their phone conversation. Choose a suggested question or type naturally into the message box. Use **STOP MUSIC** and **PLAY MUSIC** to control the soundtrack.
 
 ### Challenge progression
 
@@ -88,9 +90,9 @@ Each case adds traversal and encounter pressure. You must clear every listed obs
 
 | Level | Difficulty | Required challenges to finish |
 | --- | --- | --- |
-| **1 · The Unknown** | Easy | Find **4 clues** and vault the **fallen trail log**. If the forest creature engages, use the flashlight or a limited-use flare to create space. |
-| **2 · Museum After Dark** | Medium | Find **4 clues**, restore power at the wall switch, vault the **fallen display** and **toppled pedestal**, and repel **two increasingly aggressive ghosts**. Aim the flashlight, or use the limited-use signal flare, UV repeller, or salt-mist can to make a safe route. |
-| **3 · The Final Case** | Hard | Gather **5 pieces of evidence**, restore hall power, and vault **four obstacles**: the overturned study table, hall table, fallen chair, and shattered chandelier. Escape the faster intruder with a timed flare distraction or the restraint-foam can before returning to the hall to present your case. |
+| **1 · The Unknown** | Easy | Find **4 clues** and vault the **fallen trail log**. If the forest creature engages, hold a limited-use Echo Pulse or signal flare, or keep the flashlight trained on it to make it retreat. |
+| **2 · Museum After Dark** | Medium | Find **4 clues**, restore power at the wall switch, vault the **fallen display** and **toppled pedestal**, and repel **two increasingly aggressive ghosts**. The two-charge Echo Pulse sends them away one at a time; the flashlight, signal flare, UV repeller, and salt-mist can are alternatives. |
+| **3 · The Final Case** | Hard | Gather **5 pieces of evidence**, restore hall power, and vault **four obstacles**: the overturned study table, hall table, fallen chair, and shattered chandelier. Use the Echo Pulse to make the intruder retreat, then return to the hall to present your case; a flare or restraint foam can also create a temporary escape window. |
 
 Encounters are non-lethal defensive challenges, not combat. The Level 2 UV repeller and signal flares make a ghost retreat without harming it; the second ghost appears as soon as the first vanishes. Salt mist temporarily freezes a museum ghost; the manor restraint foam briefly pins the intruder without injury. Both create a short opportunity to move to safety. Threats pause while you review clues or use the field phone. If a threat catches you, that level restarts; clues and progress from other levels are retained.
 
