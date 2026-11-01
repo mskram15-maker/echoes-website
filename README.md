@@ -25,8 +25,9 @@ ECHOES is a browser-based, first-person mystery adventure built around three con
 - See the Sustainable Development Goal (SDG) rule for the current level while you play.
 - Explore atmospheric exhibits and manor rooms with drifting dust and firelit accents.
 - Turn on the museum and manor lights, climb the manor staircase, and inspect its landing.
+- See articulated first-person hands grip the flashlight, field phone, map, and other tools, with subtle movement sway.
 - Face non-lethal encounters: repel the forest creature and museum wraith with a flashlight, or use a signal flare to create an escape window from the manor intruder.
-- Vault fallen timber and display furniture; being caught restarts the current level.
+- Vault fallen timber, gallery debris, and overturned manor furniture; being caught restarts the current level.
 - Listen to a different procedural soundtrack in each level—or stop the music whenever you like.
 
 ## Get started

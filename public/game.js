@@ -286,8 +286,8 @@ function buildGripHand(rig,options={}) {
   hand.scale.set(scale*mirrored,scale,scale);
   rig.add(hand);
   const skin=new THREE.MeshPhysicalMaterial({
-    color:options.skinColor||0xb77b5d,roughness:0.82,clearcoat:0.06,
-    emissive:0x160a06,emissiveIntensity:0.18
+    color:options.skinColor||0xb77b5d,roughness:0.72,clearcoat:0.12,clearcoatRoughness:0.62,
+    emissive:0x100704,emissiveIntensity:0.1
   });
   const sleeveMaterial=new THREE.MeshStandardMaterial({color:options.sleeveColor||0x303936,roughness:0.96});
   const cuffMaterial=new THREE.MeshStandardMaterial({color:0x56605a,roughness:0.82});
@@ -300,41 +300,62 @@ function buildGripHand(rig,options={}) {
   cuff.rotation.copy(forearm.rotation);
   cuff.position.set(-0.012,-0.065,-0.03);
   hand.add(cuff);
-  const palm=new THREE.Mesh(new THREE.SphereGeometry(0.105,18,14),skin);
-  palm.scale.set(0.96,1.18,0.49);
+  const palm=new THREE.Mesh(new THREE.SphereGeometry(0.105,24,18),skin);
+  palm.scale.set(1.02,1.28,0.53);
   palm.position.set(0.018,0.005,-0.145);
   palm.castShadow=true;
   hand.add(palm);
 
-  const fingerOffsets=[-0.058,-0.019,0.02,0.057];
+  const heel=new THREE.Mesh(new THREE.SphereGeometry(0.071,16,12),skin);
+  heel.scale.set(0.86,0.78,0.62);
+  heel.position.set(-0.005,-0.075,-0.095);
+  heel.castShadow=true;
+  hand.add(heel);
+  const fingerOffsets=[-0.061,-0.021,0.02,0.06];
   fingerOffsets.forEach((offset,index)=>{
-    const length=0.105+(index===0||index===3?-0.012:0.008);
-    const start=new THREE.Vector3(offset, 0.015, -0.17);
-    const middle=new THREE.Vector3(offset+0.006, -0.035-length*0.34, -0.36);
-    const tip=new THREE.Vector3(offset+0.018, -0.015-length*0.78, -0.345);
-    addHandSegment(hand,start,middle,0.027,0.021,skin);
-    addHandSegment(hand,middle,tip,0.021,0.016,skin);
-    const joint=new THREE.Mesh(new THREE.SphereGeometry(0.021,10,8),skin);
-    joint.position.copy(middle);
-    hand.add(joint);
-    const nail=new THREE.Mesh(new THREE.SphereGeometry(0.012,8,6),
-      new THREE.MeshStandardMaterial({color:0xd9b7a3,roughness:0.68}));
-    nail.scale.set(0.75,1,0.35);
-    nail.position.set(tip.x,tip.y-0.012,tip.z-0.012);
+    const length=[0.125,0.15,0.145,0.12][index];
+    const start=new THREE.Vector3(offset,0.018,-0.17);
+    const knuckle=new THREE.Vector3(offset+0.004,-0.025,-0.225);
+    const middle=new THREE.Vector3(offset+0.012,-0.072-length*0.28,-0.29);
+    const tip=new THREE.Vector3(offset+0.018,-0.035-length*0.64,-0.34);
+    addHandSegment(hand,start,knuckle,0.027,0.024,skin);
+    addHandSegment(hand,knuckle,middle,0.024,0.019,skin);
+    addHandSegment(hand,middle,tip,0.019,0.015,skin);
+    for(const [jointPosition,radius] of [[knuckle,0.023],[middle,0.019]]) {
+      const joint=new THREE.Mesh(new THREE.SphereGeometry(radius,12,10),skin);
+      joint.position.copy(jointPosition);
+      joint.castShadow=true;
+      hand.add(joint);
+    }
+    const nail=new THREE.Mesh(new THREE.SphereGeometry(0.013,10,8),
+      new THREE.MeshPhysicalMaterial({color:0xd3ad98,roughness:0.52,clearcoat:0.22}));
+    nail.scale.set(0.72,1.15,0.34);
+    nail.position.set(tip.x,tip.y-0.008,tip.z+0.016);
     hand.add(nail);
   });
   const thumbStart=new THREE.Vector3(0.09,0.025,-0.16);
-  const thumbJoint=new THREE.Vector3(0.145,-0.025,-0.31);
-  const thumbTip=new THREE.Vector3(0.112,-0.09,-0.34);
-  addHandSegment(hand,thumbStart,thumbJoint,0.034,0.028,skin);
-  addHandSegment(hand,thumbJoint,thumbTip,0.028,0.021,skin);
-  const thumbJointMesh=new THREE.Mesh(new THREE.SphereGeometry(0.027,10,8),skin);
-  thumbJointMesh.position.copy(thumbJoint);
-  hand.add(thumbJointMesh);
+  const thumbBase=new THREE.Vector3(0.132,-0.005,-0.205);
+  const thumbJoint=new THREE.Vector3(0.151,-0.052,-0.28);
+  const thumbTip=new THREE.Vector3(0.108,-0.09,-0.325);
+  addHandSegment(hand,thumbStart,thumbBase,0.035,0.031,skin);
+  addHandSegment(hand,thumbBase,thumbJoint,0.031,0.025,skin);
+  addHandSegment(hand,thumbJoint,thumbTip,0.025,0.019,skin);
+  for(const [jointPosition,radius] of [[thumbBase,0.03],[thumbJoint,0.023]]) {
+    const joint=new THREE.Mesh(new THREE.SphereGeometry(radius,12,10),skin);
+    joint.position.copy(jointPosition);
+    joint.castShadow=true;
+    hand.add(joint);
+  }
+  const cuffSeam=new THREE.Mesh(new THREE.TorusGeometry(0.085,0.006,6,20),
+    new THREE.MeshStandardMaterial({color:0x879087,roughness:0.85}));
+  cuffSeam.position.set(-0.012,-0.065,-0.03);
+  cuffSeam.rotation.copy(forearm.rotation);
+  hand.add(cuffSeam);
   return hand;
 }
 function buildHeldPhone() {
   buildGripHand(phoneRig,{x:-0.01,y:0.12,z:0.02,scale:1.04,mirrored:true,sleeveColor:0x303b39});
+  buildGripHand(phoneRig,{x:0.32,y:0.08,z:0.055,scale:0.82,sleeveColor:0x303b39});
   const frame = new THREE.Mesh(new THREE.BoxGeometry(0.39,0.69,0.055),
     new THREE.MeshStandardMaterial({color:0x12191d,metalness:0.62,roughness:0.28}));
   frame.position.set(0.035,0.12,-0.27); phoneRig.add(frame);
@@ -664,6 +685,7 @@ function equipHeldItem(id) {
     return;
   }
   buildGripHand(heldToolRig,{x:id==="map"?-0.18:0,y:0.12,z:0.015});
+  if(id==="map") buildGripHand(heldToolRig,{x:0.38,y:0.1,z:0.025,scale:0.86,mirrored:true});
   const metal=new THREE.MeshStandardMaterial({color:0x35434a,metalness:0.72,roughness:0.3});
   const dark=new THREE.MeshStandardMaterial({color:0x1c2428,metalness:0.55,roughness:0.4});
   if (id==="flashlight") {
@@ -887,7 +909,7 @@ function tryClimb() {
   updateUI();
 }
 function tryVaultOrClimb() {
-  const obstacle=vaultObstacles.find(item=>Math.hypot(player.x-item.x,player.z-item.z)<2.3);
+  const obstacle=vaultObstacles.find(item=>isObstacleVisible(item)&&Math.hypot(player.x-item.x,player.z-item.z)<2.3);
   if(obstacle) {
     vaultJumpTimer=0.82;
     player.y=Math.max(player.y,2.1);
@@ -896,6 +918,12 @@ function tryVaultOrClimb() {
     return;
   }
   tryClimb();
+}
+function isObstacleVisible(obstacle) {
+  for(let parent=obstacle.parent;parent;parent=parent.parent) {
+    if(!parent.visible) return false;
+  }
+  return true;
 }
 
 function tryInteract() {
@@ -1672,46 +1700,101 @@ function createWallSwitch(x,z,label,parent=worldGroup,rotationY=Math.PI) {
   device.userData.id="wallSwitch"; device.userData.label=label;
   interactables.push(device); parent.add(device);
 }
-function createVaultObstacle(level,parent=worldGroup) {
+function createVaultObstacle(level,parent=worldGroup,variant=0) {
   const obstacle=new THREE.Group();
   let x=0,z=0,halfX=1.7,halfZ=0.55;
   if(level===1) {
-    x=4;z=2;
-    const trunk=cyl(0.26,0.31,3.8,0x513824,0,0,0,12);
-    trunk.rotation.z=Math.PI/2;trunk.rotation.y=0.12;trunk.position.y=0.42;
-    obstacle.add(trunk);
-    for(let i=0;i<5;i++) {
-      const branch=cyl(0.055,0.09,0.8,0x493522,0,0,0,7);
-      branch.position.set(-1.15+i*0.55,0.72,0.15);
-      branch.rotation.z=-0.68+(i%2)*0.34;
-      obstacle.add(branch);
+    if(variant===0) {
+      x=4;z=2;
+      const trunk=cyl(0.26,0.31,3.8,0x513824,0,0,0,12);
+      trunk.rotation.z=Math.PI/2;trunk.rotation.y=0.12;trunk.position.y=0.42;
+      obstacle.add(trunk);
+      for(let i=0;i<5;i++) {
+        const branch=cyl(0.055,0.09,0.8,0x493522,0,0,0,7);
+        branch.position.set(-1.15+i*0.55,0.72,0.15);
+        branch.rotation.z=-0.68+(i%2)*0.34;
+        obstacle.add(branch);
+      }
+      halfX=1.65;halfZ=0.55;
+    } else {
+      x=-5;z=-3.8;halfX=1.2;halfZ=0.5;
+      const root=cyl(0.2,0.24,2.9,0x493522,0,0.24,0,10);
+      root.rotation.z=Math.PI/2;root.rotation.y=-0.18;obstacle.add(root);
+      for(let i=0;i<4;i++) {
+        const branch=cyl(0.045,0.08,0.72,0x58402a,0,0,0,7);
+        branch.position.set(-0.88+i*0.58,0.45,0.08+(i%2)*0.14);
+        branch.rotation.z=(i%2?0.68:-0.58);obstacle.add(branch);
+      }
+      for(const side of [-1,1]) {
+        const moss=ellipsoid(0.28,0.12,0.34,side===1?0x40513a:0x536143,0.98);
+        moss.position.set(side*0.62,0.2,0.18);obstacle.add(moss);
+      }
     }
-    halfX=1.65;halfZ=0.55;
   } else if(level===2) {
-    z=4.4;
-    const crate=box(3.7,0.68,0.72,0x594a39,0,0.34,0);
-    crate.rotation.y=0.08;obstacle.add(crate);
-    for(let i=0;i<4;i++) {
-      const shard=box(0.68,0.18,0.16,0x83745e,-1.2+i*0.8,0.78,0.06);
-      shard.rotation.z=(i%2?1:-1)*0.22;obstacle.add(shard);
+    if(variant===0) {
+      z=4.4;
+      const crate=box(3.7,0.68,0.72,0x594a39,0,0.34,0);
+      crate.rotation.y=0.08;obstacle.add(crate);
+      for(let i=0;i<4;i++) {
+        const shard=box(0.68,0.18,0.16,0x83745e,-1.2+i*0.8,0.78,0.06);
+        shard.rotation.z=(i%2?1:-1)*0.22;obstacle.add(shard);
+      }
+      halfX=1.8;halfZ=0.62;
+    } else {
+      x=5.1;z=0.5;halfX=1.15;halfZ=0.62;
+      const pedestal=box(1.9,0.5,1.1,0x51483c,0,0.25,0);
+      pedestal.rotation.y=-0.18;obstacle.add(pedestal);
+      const panel=box(1.6,0.16,1.2,0x7d715e,0.14,0.88,0);
+      panel.rotation.set(0.24,0.18,-0.5);obstacle.add(panel);
+      for(let i=0;i<3;i++) {
+        const fragment=box(0.34,0.12,0.2,0x9a8d75,-0.5+i*0.52,0.62,0.48);
+        fragment.rotation.y=i*0.46;fragment.rotation.z=-0.18;obstacle.add(fragment);
+      }
     }
-    halfX=1.8;halfZ=0.62;
   } else {
-    x=0;z=parent===roomStudy?-3.4:3.45;
-    const table=box(3.7,0.42,0.82,0x49382d,0,0.76,0);
-    table.rotation.z=0.08;obstacle.add(table);
-    for(const side of [-1,1]) {
-      const leg=box(0.13,0.72,0.13,0x342820,side*1.35,0.38,0);
-      leg.rotation.z=side*0.16;obstacle.add(leg);
+    if(parent===roomStudy) {
+      x=0;z=-3.4;
+      const table=box(3.7,0.42,0.82,0x49382d,0,0.76,0);
+      table.rotation.z=0.08;obstacle.add(table);
+      for(const side of [-1,1]) {
+        const leg=box(0.13,0.72,0.13,0x342820,side*1.35,0.38,0);
+        leg.rotation.z=side*0.16;obstacle.add(leg);
+      }
+      const runner=box(2.1,0.05,0.62,0x8c6b45,0,1.0,0);
+      obstacle.add(runner);
+      halfX=1.75;halfZ=0.66;
+    } else if(variant===0) {
+      x=0;z=3.45;
+      const table=box(3.7,0.42,0.82,0x49382d,0,0.76,0);
+      table.rotation.z=0.08;obstacle.add(table);
+      for(const side of [-1,1]) {
+        const leg=box(0.13,0.72,0.13,0x342820,side*1.35,0.38,0);
+        leg.rotation.z=side*0.16;obstacle.add(leg);
+      }
+      const runner=box(2.1,0.05,0.62,0x8c6b45,0,1.0,0);
+      obstacle.add(runner);
+      halfX=1.75;halfZ=0.66;
+    } else {
+      x=4.7;z=2.2;halfX=0.92;halfZ=0.62;
+      const seat=box(1.15,0.14,0.9,0x513d30,0,0.55,0);
+      seat.rotation.z=-0.22;seat.rotation.x=0.2;obstacle.add(seat);
+      const back=box(1.12,0.16,0.75,0x624a38,0,0.96,-0.22);
+      back.rotation.z=-0.62;back.rotation.x=0.18;obstacle.add(back);
+      for(const side of [-1,1]) {
+        const leg=box(0.09,0.62,0.09,0x382a23,side*0.42,0.28,0.18);
+        leg.rotation.z=side*0.2;obstacle.add(leg);
+      }
+      for(let i=0;i<3;i++) {
+        const book=box(0.42,0.09,0.3,[0x74433b,0x3e5360,0x82704b][i],
+          -0.5+i*0.52,0.08,0.7);
+        book.rotation.y=(i-1)*0.22;obstacle.add(book);
+      }
     }
-    const runner=box(2.1,0.05,0.62,0x8c6b45,0,1.0,0);
-    obstacle.add(runner);
-    halfX=1.75;halfZ=0.66;
   }
   obstacle.position.set(x,0,z);
   obstacle.traverse(mesh=>{if(mesh.isMesh){mesh.castShadow=true;mesh.receiveShadow=true;}});
   parent.add(obstacle);
-  vaultObstacles.push({level,x,z,halfX,halfZ});
+  vaultObstacles.push({level,x,z,halfX,halfZ,parent});
 }
 function createEncounterThreat(level,parent=worldGroup) {
   const group=new THREE.Group();
@@ -1777,6 +1860,8 @@ function createEncounterThreat(level,parent=worldGroup) {
   const names={1:"The Ridge Stalker",2:"The Gallery Wraith",3:"The Manor Intruder"};
   encounterState={level,threat:group,active:false,cleared:false,progress:0,distractedUntil:0,failed:false,studyObstacleVaulted:false};
   encounterState.name=names[level];
+  const title=document.getElementById("encounterTitle");
+  if(title) title.textContent=encounterState.name.toUpperCase();
 }
 function setEncounterHint(text) {
   const hint=document.getElementById("encounterHint");
@@ -2419,6 +2504,7 @@ function buildLevel1() {
 
   player = { x:0, y:1.6, z:10, yaw:-0.36, pitch:0, onGround:true };
   createVaultObstacle(1);
+  createVaultObstacle(1,worldGroup,1);
   createEncounterThreat(1);
   state.hour=14; state.minute=32; updateDayNight();
 }
@@ -2715,6 +2801,7 @@ function buildLevel2() {
 
   player={x:0,y:1.6,z:10,yaw:0,pitch:0,onGround:true};
   createVaultObstacle(2);
+  createVaultObstacle(2,worldGroup,1);
   createEncounterThreat(2);
   state.hour=23; state.minute=42; updateDayNight();
 }
@@ -2956,6 +3043,7 @@ function buildLevel3() {
 
   player={x:0,y:1.6,z:6,yaw:0,pitch:0,onGround:true};
   createVaultObstacle(3);
+  createVaultObstacle(3,worldGroup,1);
   createVaultObstacle(3,roomStudy);
   createEncounterThreat(3,roomStudy);
   state.hour=2; state.minute=17; updateDayNight();
@@ -2976,6 +3064,7 @@ function updatePlayer(dt) {
     const l=Math.hypot(mx,mz),nextX=THREE.MathUtils.clamp(player.x+mx/l*speed,-15,15),
       nextZ=THREE.MathUtils.clamp(player.z+mz/l*speed,-15,15);
     const blocked=vaultJumpTimer<=0&&vaultObstacles.some(obstacle=>{
+      if(!isObstacleVisible(obstacle)) return false;
       const currentInside=Math.abs(player.x-obstacle.x)<obstacle.halfX&&Math.abs(player.z-obstacle.z)<obstacle.halfZ;
       const nextInside=Math.abs(nextX-obstacle.x)<obstacle.halfX&&Math.abs(nextZ-obstacle.z)<obstacle.halfZ;
       return nextInside&&!currentInside;
@@ -3194,6 +3283,20 @@ function animate() {
     if(phoneRigOpen) {
       phoneRig.rotation.z=-0.08+Math.sin(t*0.85)*0.012;
       phoneRig.position.x=-0.3+Math.sin(t*0.65)*0.008;
+    }
+    if(heldToolRig&&heldToolRig.visible) {
+      const moving=Boolean(keys["KeyW"]||keys["ArrowUp"]||keys["btn_forward"]||
+        keys["KeyS"]||keys["ArrowDown"]||keys["btn_back"]||
+        keys["KeyA"]||keys["ArrowLeft"]||keys["btn_left"]||
+        keys["KeyD"]||keys["ArrowRight"]||keys["btn_right"]);
+      const baseY=-0.22+Math.sin(t*(moving?9:1.2))* (moving?0.014:0.003);
+      heldToolRig.position.x=THREE.MathUtils.lerp(heldToolRig.position.x,
+        0.43+Math.sin(t*4.5)*(moving?0.018:0.004),Math.min(1,dt*8));
+      heldToolRig.position.y=THREE.MathUtils.lerp(heldToolRig.position.y,baseY,Math.min(1,dt*9));
+      heldToolRig.rotation.x=THREE.MathUtils.lerp(heldToolRig.rotation.x,
+        moving?Math.sin(t*9)*0.025:Math.sin(t*1.2)*0.006,Math.min(1,dt*8));
+      heldToolRig.rotation.z=THREE.MathUtils.lerp(heldToolRig.rotation.z,
+        Math.sin(t*4.5)*(moving?0.025:0.006),Math.min(1,dt*8));
     }
   }
   if (document.getElementById("game").classList.contains("active")) {
