@@ -38,6 +38,9 @@ let investigationTeam = { members: [], activeIndex: 0 };
 let interiorFixtures = [], interiorSwitchMesh = null, interiorLightsOn = false;
 let fireFlames = [], fireEmbers = [], waterRipples = [];
 let atmosphereFields = [];
+let encounterState = { level:0, threat:null, active:false, cleared:false, progress:0, distractedUntil:0, failed:false };
+let vaultObstacles = [];
+let vaultJumpTimer = 0;
 let mapContext = null, lastMapUpdate = 0;
 const interactionRaycaster = new THREE.Raycaster();
 const cameraTarget = new THREE.Vector3();
@@ -205,8 +208,8 @@ function setupControls() {
     if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","KeyW","KeyA","KeyS","KeyD","KeyF","Space","KeyE","KeyP"].includes(e.code)) e.preventDefault();
     if (e.repeat) return;
     if (e.code === "KeyF") toggleFlashlight();
-    if (e.code === "Space") tryClimb();
-    if (e.code === "KeyE") equippedItemId && ["food","water","meds"].includes(equippedItemId) ? useEquippedItem() : toggleGrab();
+    if (e.code === "Space") tryVaultOrClimb();
+    if (e.code === "KeyE") equippedItemId && ["food","water","meds","flare"].includes(equippedItemId) ? useEquippedItem() : toggleGrab();
     if (e.code === "KeyP" && investigationTeam.members.length > 1) passInvestigator();
   });
   peopleMeshes.forEach(person => {
@@ -758,6 +761,16 @@ function equipHeldItem(id) {
       new THREE.MeshStandardMaterial({color:0xd9bd7a,metalness:0.8,roughness:0.24}));
     cap.position.set(0.025,0.12,-0.266);
     heldToolRig.add(cap);
+  } else if (id==="flare") {
+    const body=new THREE.Mesh(new THREE.CylinderGeometry(0.048,0.062,0.34,14),
+      new THREE.MeshStandardMaterial({color:0xb83f2d,roughness:0.48,metalness:0.16}));
+    body.rotation.x=-Math.PI/2;body.position.set(0.04,0.055,-0.31);heldToolRig.add(body);
+    const grip=new THREE.Mesh(new THREE.CylinderGeometry(0.045,0.05,0.12,12),
+      new THREE.MeshStandardMaterial({color:0x343b3c,roughness:0.68}));
+    grip.rotation.x=-Math.PI/2;grip.position.set(0.04,0.055,-0.07);heldToolRig.add(grip);
+    const cap=new THREE.Mesh(new THREE.CylinderGeometry(0.066,0.055,0.07,14),
+      new THREE.MeshStandardMaterial({color:0xff9b54,emissive:0xff5d28,emissiveIntensity:0.7,roughness:0.35}));
+    cap.rotation.x=-Math.PI/2;cap.position.set(0.04,0.055,-0.53);heldToolRig.add(cap);
   }
   updateActionButton();
 }
@@ -766,10 +779,20 @@ function unequipHeldItem() {
   updateUI();
 }
 function useEquippedItem() {
-  if (!equippedItemId || !["food","water","meds"].includes(equippedItemId)) return false;
+  if (!equippedItemId || !["food","water","meds","flare"].includes(equippedItemId)) return false;
   const item=state.inventory.find(i=>i.id===equippedItemId);
   if (!item || item.uses<=0) { addMsg("system","There is none left to use."); return true; }
-  if (equippedItemId==="food") {
+  if(equippedItemId==="flare") {
+    item.uses--;
+    if(encounterState.active&&!encounterState.cleared) {
+      encounterState.distractedUntil=performance.now()/1000+8;
+      if(state.level<3) clearEncounter("The bright flare sends the presence recoiling long enough for you to get clear.");
+      else {
+        addMsg("system","The flare blooms bright. The stalker shields their eyes—use the opening to retreat through the study door.");
+        setEncounterHint("DISTRACTED · GET TO THE STUDY DOOR");
+      }
+    } else addMsg("system","The signal flare burns bright, marking your position without harming anyone.");
+  } else if (equippedItemId==="food") {
     item.uses--; state.food=Math.max(0,state.food-0.4);
     state.health=Math.min(100,state.health+8); advanceTime(5);
     addMsg("system","You eat from the ration tin. Strength returns.");
@@ -792,10 +815,10 @@ function useItemById(id) {
   const item = state.inventory.find(i => i.id === id);
   if (!item) return;
   if (id === "flashlight") { toggleFlashlight(); return; }
-  if (["food","water","meds"].includes(id)) {
+  if (["food","water","meds","flare"].includes(id)) {
     if(equippedItemId===id) { unequipHeldItem(); return; }
     equipHeldItem(id);
-    addMsg("system",`Holding ${item.name.replace(/^\S+\s*/,"")}. Press E or USE to consume it.`);
+    addMsg("system",id==="flare"?"You hold a signal flare. Press E or USE FLARE to create a bright, non-harmful distraction.":`Holding ${item.name.replace(/^\S+\s*/,"")}. Press E or USE to consume it.`);
     updateUI();
     return;
   }
@@ -862,6 +885,17 @@ function tryClimb() {
     checkL1();
   } else addMsg("ai","On the ridge again.");
   updateUI();
+}
+function tryVaultOrClimb() {
+  const obstacle=vaultObstacles.find(item=>Math.hypot(player.x-item.x,player.z-item.z)<2.3);
+  if(obstacle) {
+    vaultJumpTimer=0.82;
+    player.y=Math.max(player.y,2.1);
+    if(obstacle.level===3&&state.memory.inStudy) encounterState.studyObstacleVaulted=true;
+    addMsg("system","You vault the obstacle. Keep moving!");
+    return;
+  }
+  tryClimb();
 }
 
 function tryInteract() {
@@ -1443,7 +1477,9 @@ function checkL2() {
     { text: "Clues "+n+"/"+state.requiredClues, done: n>=state.requiredClues }
   ];
   if (n>=state.requiredClues && !state.levelComplete)
-    addMsg("system","Enough. Type 'leave museum' or 'I'm ready' when you understand.");
+    addMsg("system",encounterState.active&&!encounterState.cleared
+      ?"Enough clues. Repel the gallery wraith with your flashlight, then type 'leave museum'."
+      :"Enough. Type 'leave museum' or 'I'm ready' when you understand.");
   updateUI();
 }
 
@@ -1451,7 +1487,7 @@ function checkL2() {
 function enterStudy() {
   state.memory.inStudy = true;
   state.location = "Study — Crime Scene";
-  player.x = 0; player.z = -2; player.yaw = 0;
+  player.x = 0; player.z = -10; player.yaw = Math.PI;
   setScene("The study. Desk, letter, clock in the corner, evidence markers. This is where it happened.");
   addMsg("system","You enter the study. Crime scene tape. Examine everything.");
   if (roomHall) roomHall.visible = false;
@@ -1459,6 +1495,19 @@ function enterStudy() {
   updateUI();
 }
 function leaveStudy() {
+  if(encounterState.active&&!encounterState.cleared&&!encounterState.studyObstacleVaulted) {
+    addMsg("warning","The overturned table blocks the exit. Get close and press Space to vault it.");
+    return;
+  }
+  if(encounterState.active&&!encounterState.cleared&&Math.hypot(player.x,player.z+2.2)>2.5) {
+    addMsg("warning","Reach the study doorway to get back to the hall.");
+    return;
+  }
+  if(encounterState.active&&!encounterState.cleared&&performance.now()/1000>encounterState.distractedUntil) {
+    addMsg("warning","The intruder is between you and the hall. Use a signal flare to distract them, then reach the study door.");
+    return;
+  }
+  if(encounterState.active&&!encounterState.cleared) clearEncounter("You make it back to the lit hall while the intruder is distracted. Help is on the way.");
   state.memory.inStudy = false;
   state.location = "Blackwood Manor — Grand Hall";
   player.x = 0; player.z = 6; player.yaw = Math.PI;
@@ -1510,11 +1559,17 @@ function checkL3() {
     { text: "Evidence "+n+"/"+state.requiredClues, done: n>=state.requiredClues }
   ];
   if (n>=state.requiredClues && !state.levelComplete)
-    addMsg("system","Enough evidence. Type 'prove my innocence' when ready.");
+    addMsg("system",encounterState.active&&!encounterState.cleared
+      ?"Enough evidence. Distract the intruder, vault the table, and reach the hall before presenting your case."
+      :"Enough evidence. Type 'prove my innocence' when ready.");
   updateUI();
 }
 function proveInnocence() {
   if (state.clues.length < state.requiredClues) { addMsg("ai","Need more evidence first."); return; }
+  if(encounterState.active&&!encounterState.cleared) {
+    addMsg("warning","Reach the hall safely before presenting your case. Distract the intruder with the flare, vault the overturned table, and use the study door.");
+    return;
+  }
   addMsg("ai","You present the full timeline. Planted key. Camera alibi. Vale breaks.");
   addMsg("character","I only needed the memory. You were supposed to stay asleep.","Dr. Adrian Vale");
   state.levelComplete = true; state.info = 98;
@@ -1540,6 +1595,8 @@ function clearWorld() {
   atmosphereFields=[];
   fireFlames=[]; fireEmbers=[]; waterRipples=[]; interiorFixtures=[]; interiorSwitchMesh=null;
   interiorLightsOn=false; hillMesh = null; fireLight = null; roomStudy = null; roomHall = null; heldObject = null;
+  encounterState={level:0,threat:null,active:false,cleared:false,progress:0,distractedUntil:0,failed:false,studyObstacleVaulted:false};
+  vaultObstacles=[];vaultJumpTimer=0;
   clearHeldTool();
   const rm = []; scene.traverse(o => { if (o.isLight && o !== flashlight) rm.push(o); });
   rm.forEach(l => scene.remove(l));
@@ -1614,6 +1671,198 @@ function createWallSwitch(x,z,label,parent=worldGroup,rotationY=Math.PI) {
   interiorSwitchMesh=device;
   device.userData.id="wallSwitch"; device.userData.label=label;
   interactables.push(device); parent.add(device);
+}
+function createVaultObstacle(level,parent=worldGroup) {
+  const obstacle=new THREE.Group();
+  let x=0,z=0,halfX=1.7,halfZ=0.55;
+  if(level===1) {
+    x=4;z=2;
+    const trunk=cyl(0.26,0.31,3.8,0x513824,0,0,0,12);
+    trunk.rotation.z=Math.PI/2;trunk.rotation.y=0.12;trunk.position.y=0.42;
+    obstacle.add(trunk);
+    for(let i=0;i<5;i++) {
+      const branch=cyl(0.055,0.09,0.8,0x493522,0,0,0,7);
+      branch.position.set(-1.15+i*0.55,0.72,0.15);
+      branch.rotation.z=-0.68+(i%2)*0.34;
+      obstacle.add(branch);
+    }
+    halfX=1.65;halfZ=0.55;
+  } else if(level===2) {
+    z=4.4;
+    const crate=box(3.7,0.68,0.72,0x594a39,0,0.34,0);
+    crate.rotation.y=0.08;obstacle.add(crate);
+    for(let i=0;i<4;i++) {
+      const shard=box(0.68,0.18,0.16,0x83745e,-1.2+i*0.8,0.78,0.06);
+      shard.rotation.z=(i%2?1:-1)*0.22;obstacle.add(shard);
+    }
+    halfX=1.8;halfZ=0.62;
+  } else {
+    x=0;z=parent===roomStudy?-3.4:3.45;
+    const table=box(3.7,0.42,0.82,0x49382d,0,0.76,0);
+    table.rotation.z=0.08;obstacle.add(table);
+    for(const side of [-1,1]) {
+      const leg=box(0.13,0.72,0.13,0x342820,side*1.35,0.38,0);
+      leg.rotation.z=side*0.16;obstacle.add(leg);
+    }
+    const runner=box(2.1,0.05,0.62,0x8c6b45,0,1.0,0);
+    obstacle.add(runner);
+    halfX=1.75;halfZ=0.66;
+  }
+  obstacle.position.set(x,0,z);
+  obstacle.traverse(mesh=>{if(mesh.isMesh){mesh.castShadow=true;mesh.receiveShadow=true;}});
+  parent.add(obstacle);
+  vaultObstacles.push({level,x,z,halfX,halfZ});
+}
+function createEncounterThreat(level,parent=worldGroup) {
+  const group=new THREE.Group();
+  const luminous=(color,emissive,opacity=1)=>new THREE.MeshStandardMaterial({
+    color,emissive,emissiveIntensity:0.72,roughness:0.82,transparent:opacity<1,opacity,depthWrite:opacity>=1
+  });
+  if(level===1) {
+    const fur=luminous(0x26372b,0x0c190e);
+    const creature=ellipsoid(0.62,0.95,0.47,0x26372b,0.9,fur);
+    creature.position.y=1.18;group.add(creature);
+    const head=ellipsoid(0.48,0.45,0.43,0x354735,0.9,fur);
+    head.position.set(0,2.0,-0.05);group.add(head);
+    for(const side of [-1,1]) {
+      const arm=ellipsoid(0.17,0.72,0.2,0x26372b,0.9,fur);
+      arm.position.set(side*0.59,1.25,0.03);arm.rotation.z=side*0.18;group.add(arm);
+      const eye=ellipsoid(0.06,0.045,0.035,0xf5c878,0.35,
+        new THREE.MeshBasicMaterial({color:0xffc15e}));
+      eye.position.set(side*0.19,2.06,-0.43);group.add(eye);
+      const antler=cyl(0.035,0.05,0.64,0x786948,side*0.24,2.44,-0.02,6);
+      antler.rotation.z=side*0.4;group.add(antler);
+    }
+    const lowerFace=ellipsoid(0.26,0.11,0.08,0x111812,0.92);
+    lowerFace.position.set(0,1.83,-0.42);group.add(lowerFace);
+    group.position.set(8,0,-1);
+  } else if(level===2) {
+    const spiritMaterial=luminous(0x9ccde2,0x4ab3d2,0.56);
+    const robe=new THREE.Mesh(new THREE.ConeGeometry(0.76,2.5,9,3,true),spiritMaterial);
+    robe.position.y=1.35;group.add(robe);
+    for(let i=0;i<3;i++) {
+      const wisp=ellipsoid(0.45-i*0.07,0.32,0.4,0xa9dce5,0.4,spiritMaterial);
+      wisp.position.set((i-1)*0.34,0.3+i*0.08,0.05);group.add(wisp);
+    }
+    const face=ellipsoid(0.43,0.47,0.35,0xa9dce5,0.45,spiritMaterial);
+    face.position.y=2.48;group.add(face);
+    for(const side of [-1,1]) {
+      const eye=ellipsoid(0.065,0.09,0.045,0x173a53,0.3,
+        new THREE.MeshBasicMaterial({color:0x91e8ff}));
+      eye.position.set(side*0.15,2.5,-0.32);group.add(eye);
+    }
+    group.position.set(0,0,-2);
+  } else {
+    const coat=luminous(0x20262d,0x070b10);
+    const torso=ellipsoid(0.48,0.86,0.31,0x20262d,0.96,coat);
+    torso.position.y=1.3;group.add(torso);
+    const hood=ellipsoid(0.38,0.44,0.34,0x151b21,0.95,coat);
+    hood.position.set(0,2.23,-0.02);group.add(hood);
+    const face=ellipsoid(0.24,0.29,0.14,0x5c514b,0.98);
+    face.position.set(0,2.2,-0.31);group.add(face);
+    for(const side of [-1,1]) {
+      const arm=ellipsoid(0.16,0.68,0.18,0x20262d,0.96,coat);
+      arm.position.set(side*0.47,1.3,-0.02);arm.rotation.z=side*0.12;group.add(arm);
+      const leg=ellipsoid(0.19,0.55,0.23,0x1a2025,0.96,coat);
+      leg.position.set(side*0.2,0.45,0.02);group.add(leg);
+    }
+    const scarf=new THREE.Mesh(new THREE.TorusGeometry(0.29,0.06,7,18),
+      new THREE.MeshStandardMaterial({color:0x853c34,roughness:0.95}));
+    scarf.position.set(0,1.91,-0.04);group.add(scarf);
+    group.position.set(0,0,-1);
+  }
+  group.visible=false;
+  group.traverse(mesh=>{if(mesh.isMesh){mesh.castShadow=true;mesh.receiveShadow=true;}});
+  parent.add(group);
+  const names={1:"The Ridge Stalker",2:"The Gallery Wraith",3:"The Manor Intruder"};
+  encounterState={level,threat:group,active:false,cleared:false,progress:0,distractedUntil:0,failed:false,studyObstacleVaulted:false};
+  encounterState.name=names[level];
+}
+function setEncounterHint(text) {
+  const hint=document.getElementById("encounterHint");
+  if(hint) hint.textContent=text;
+}
+function clearEncounter(message) {
+  encounterState.cleared=true;
+  encounterState.progress=1;
+  if(encounterState.threat) encounterState.threat.visible=false;
+  const title=document.getElementById("encounterTitle");
+  const status=document.getElementById("encounterStatus");
+  const progress=document.getElementById("encounterProgress");
+  if(title) title.textContent="ROUTE CLEAR";
+  if(progress) progress.style.width="100%";
+  setEncounterHint("You made it through without anyone getting hurt.");
+  if(message) addMsg("system",message);
+}
+function updateEncounter(dt,time) {
+  const status=document.getElementById("encounterStatus");
+  if(!status||!encounterState.threat||encounterState.level!==state.level||state.levelComplete) {
+    if(status) status.hidden=true;
+    return;
+  }
+  if(encounterState.cleared) {
+    status.hidden=false;
+    return;
+  }
+  const canActivate=state.clues.length>=2&&(state.level!==3||state.memory.inStudy);
+  if(!canActivate) { status.hidden=true;return; }
+  if(!encounterState.active) {
+    encounterState.active=true;
+    encounterState.threat.visible=true;
+    status.hidden=false;
+    const messages={
+      1:"Movement in the tree line! Keep the flashlight on the creature and find a way around the fallen timber.",
+      2:"A cold shape drifts out of the gallery. Use the flashlight to drive it back and vault the fallen display.",
+      3:"Someone is blocking the study exit. The flare can create a distraction; use it, vault the debris, and reach the hall."
+    };
+    addMsg("warning",messages[state.level]);
+  }
+  status.hidden=false;
+  const threat=encounterState.threat;
+  const dx=player.x-threat.position.x,dz=player.z-threat.position.z;
+  const distance=Math.hypot(dx,dz);
+  const forwardX=-Math.sin(player.yaw),forwardZ=-Math.cos(player.yaw);
+  const towardX=distance?dx/distance:0,towardZ=distance?dz/distance:0;
+  const facing=forwardX*towardX+forwardZ*towardZ;
+  const beamHit=state.memory.flashlightOn&&distance<11&&facing>0.72&&state.level<3;
+  const distracted=performance.now()/1000<encounterState.distractedUntil;
+  const title=document.getElementById("encounterTitle");
+  const progress=document.getElementById("encounterProgress");
+  if(title) title.textContent=distracted?"DISTRACTION ACTIVE":encounterState.name.toUpperCase();
+  const phoneOverlay=document.getElementById("phoneChatOverlay");
+  if(document.activeElement===document.getElementById("commandInput")||(phoneOverlay&&!phoneOverlay.hidden)) {
+    setEncounterHint("Threat paused while you review clues or use the field phone");
+    return;
+  }
+  if(beamHit) {
+    encounterState.progress=Math.min(1,encounterState.progress+dt/(state.level===1?2.3:3.2));
+    const away=new THREE.Vector3(-towardX,0,-towardZ);
+    threat.position.addScaledVector(away,dt*1.05);
+    setEncounterHint("Keep the flashlight trained on it to open the route");
+  } else if(distracted) {
+    setEncounterHint("DISTRACTED · GET TO THE STUDY DOOR");
+  } else {
+    encounterState.progress=Math.max(0,encounterState.progress-dt*0.12);
+    const speed=state.level===1?1.15:state.level===2?1.48:2.05;
+    if(distance>0.2) threat.position.add(new THREE.Vector3(towardX,0,towardZ).multiplyScalar(speed*dt));
+    setEncounterHint(state.level===3?"Use the signal flare, then escape to the hall":"Aim the flashlight at the threat");
+  }
+  if(progress) progress.style.width=`${Math.round(encounterState.progress*100)}%`;
+  threat.position.y=state.level===2?0.12+Math.sin(time*2.7)*0.2:0;
+  threat.rotation.y=Math.atan2(player.x-threat.position.x,player.z-threat.position.z);
+  const pulse=1+Math.sin(time*(state.level===2?3.2:2.1))*0.035;
+  threat.scale.set(pulse,1,pulse);
+  if(encounterState.progress>=1) clearEncounter(state.level===1
+    ?"The flashlight holds the forest creature at bay until it slips back into the trees."
+    :"The focused beam dissolves the spectral figure into the exhibit shadows.");
+  if(!encounterState.failed&&distance<1.35&&!distracted) {
+    encounterState.failed=true;
+    status.hidden=false;
+    if(title) title.textContent="RETREATING TO SAFE START";
+    setEncounterHint("The encounter overwhelmed you. This level is restarting.");
+    addMsg("warning","You retreat to safety. The level will restart from its beginning.");
+    window.setTimeout(()=>resetLevel(state.level),1800);
+  }
 }
 function setInteriorLights(on) {
   interiorLightsOn=on;
@@ -2169,6 +2418,8 @@ function buildLevel1() {
   const stone = box(0.25, 0.15, 0.2, 0x666660, -1, 0.12, 9); addInt(stone, "stone", "Sharp stone", true);
 
   player = { x:0, y:1.6, z:10, yaw:-0.36, pitch:0, onGround:true };
+  createVaultObstacle(1);
+  createEncounterThreat(1);
   state.hour=14; state.minute=32; updateDayNight();
 }
 
@@ -2463,6 +2714,8 @@ function buildLevel2() {
   createWallSwitch(-2.4,8.74,"Brass Museum Light Switch",worldGroup,0);
 
   player={x:0,y:1.6,z:10,yaw:0,pitch:0,onGround:true};
+  createVaultObstacle(2);
+  createEncounterThreat(2);
   state.hour=23; state.minute=42; updateDayNight();
 }
 
@@ -2702,12 +2955,16 @@ function buildLevel3() {
   studyLamp.position.set(2.05,2,-9); roomStudy.add(studyLamp);
 
   player={x:0,y:1.6,z:6,yaw:0,pitch:0,onGround:true};
+  createVaultObstacle(3);
+  createVaultObstacle(3,roomStudy);
+  createEncounterThreat(3,roomStudy);
   state.hour=2; state.minute=17; updateDayNight();
 }
 
 // ---------- LOOP ----------
 function updatePlayer(dt) {
   const speed = (keys["ShiftLeft"]?6.5:4)*dt;
+  vaultJumpTimer=Math.max(0,vaultJumpTimer-dt);
   const f = new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
   const r = new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
   let mx=0,mz=0;
@@ -2715,8 +2972,18 @@ function updatePlayer(dt) {
   if (keys["KeyS"]||keys["ArrowDown"]||keys["btn_back"]){mx-=f.x;mz-=f.z;}
   if (keys["KeyA"]||keys["ArrowLeft"]||keys["btn_left"]){mx-=r.x;mz-=r.z;}
   if (keys["KeyD"]||keys["ArrowRight"]||keys["btn_right"]){mx+=r.x;mz+=r.z;}
-  if (mx||mz){ const l=Math.hypot(mx,mz); player.x+=mx/l*speed; player.z+=mz/l*speed;
-    player.x=Math.max(-15,Math.min(15,player.x)); player.z=Math.max(-15,Math.min(15,player.z)); }
+  if (mx||mz) {
+    const l=Math.hypot(mx,mz),nextX=THREE.MathUtils.clamp(player.x+mx/l*speed,-15,15),
+      nextZ=THREE.MathUtils.clamp(player.z+mz/l*speed,-15,15);
+    const blocked=vaultJumpTimer<=0&&vaultObstacles.some(obstacle=>{
+      const currentInside=Math.abs(player.x-obstacle.x)<obstacle.halfX&&Math.abs(player.z-obstacle.z)<obstacle.halfZ;
+      const nextInside=Math.abs(nextX-obstacle.x)<obstacle.halfX&&Math.abs(nextZ-obstacle.z)<obstacle.halfZ;
+      return nextInside&&!currentInside;
+    });
+    if(!blocked) { player.x=nextX;player.z=nextZ; }
+  }
+  if(vaultJumpTimer>0) player.y=1.6+Math.sin((1-vaultJumpTimer/0.82)*Math.PI)*0.95;
+  else if(state.level!==3||!state.memory.inStudy) player.y=THREE.MathUtils.lerp(player.y,1.6,1-Math.exp(-dt*12));
   if (!player.onGround && hillMesh) {
     const d=Math.hypot(player.x-hillMesh.position.x, player.z-hillMesh.position.z);
     if (d<5.5) player.y=THREE.MathUtils.lerp(player.y, Math.max(1.6,4.5-d*0.5), 0.1);
@@ -2798,8 +3065,8 @@ function checkHover() {
 function updateActionButton() {
   const actionButton=document.getElementById("actionButton");
   if (!actionButton) return;
-  actionButton.textContent=equippedItemId&&["food","water","meds"].includes(equippedItemId)
-    ? "USE "+equippedItemId.toUpperCase()
+  actionButton.textContent=equippedItemId&&["food","water","meds","flare"].includes(equippedItemId)
+    ? equippedItemId==="flare"?"USE FLARE":"USE "+equippedItemId.toUpperCase()
     : heldObject?"DROP":currentHover&&currentHover.userData.id==="wallSwitch"?"SWITCH"
     :currentHover&&currentHover.userData.grabbable?"PICK UP"
     :currentHover&&characterChatbots[currentHover.userData.id]?"TALK":"INSPECT";
@@ -2931,6 +3198,7 @@ function animate() {
   }
   if (document.getElementById("game").classList.contains("active")) {
     updatePlayer(dt); checkHover();
+    updateEncounter(dt,t);
     // Tree sway
     treeMeshes.forEach(tr => {
       tr.rotation.z = Math.sin(t * tr.userData.sway + tr.userData.phase) * tr.userData.swayAmount;
@@ -3075,9 +3343,9 @@ function closeIntro() {
   document.getElementById("introOverlay").classList.remove("active");
   document.getElementById("gameCanvas").focus();
   onResize();
-  if (state.level === 1) showInstr("BRIEFING — LEVEL 1", "<b>Goal:</b> Find at least <b>4 clues</b> before leaving.<br><br>• <b>WASD</b> move · Drag to look<br>• Follow the live field map to the camp, hill, road and stream<br>• <b>F</b> flashlight · <b>SPACE</b> climb the hill<br>• Click food or water to hold it; press <b>E</b> to use it<br>• Click or tap the campsite, trees, road and footprints<br><br>Watch the smoke. Follow the prints.");
-  else if (state.level === 2) showInstr("BRIEFING — LEVEL 2", "<b>Goal:</b> Uncover Project Echo — <b>4 clues</b>.<br><br>• Find the brass wall switch to light the museum<br>• Question the artifact, knight, dinosaur skeleton, and painted witness<br>• Search the curator's desk; click the portrait to talk or type <b>examine painting</b> to inspect it<br>• Your Strange Key may open the service door<br>• In team mode, pass the investigation between players; all discoveries are shared");
-  else showInstr("BRIEFING — LEVEL 3", "<b>Goal:</b> Prove innocence — <b>5 evidence</b> pieces.<br><br>• Find the wall switch and click it to light the hall<br>• Walk up the staircase to reach the portrait landing<br>• Enter the <b>Study</b> through the door and inspect the clock, letter and weapon<br>• Question Vale and Anna; check the security terminal<br>• Type <b>prove my innocence</b> when ready");
+  if (state.level === 1) showInstr("BRIEFING — LEVEL 1", "<b>Goal:</b> Find at least <b>4 clues</b> before leaving.<br><br>• <b>WASD</b> move · Drag to look<br>• Follow the live field map to the camp, hill, road and stream<br>• <b>F</b> flashlight · <b>SPACE</b> climb the hill or vault nearby timber<br>• Hold and use the signal flare with <b>E</b> if needed<br>• Click or tap the campsite, trees, road and footprints<br><br>Encounters are non-lethal: use the flashlight to hold the forest creature back. Watch the smoke. Follow the prints.");
+  else if (state.level === 2) showInstr("BRIEFING — LEVEL 2", "<b>Goal:</b> Uncover Project Echo — <b>4 clues</b>.<br><br>• Find the brass wall switch to light the museum<br>• Question the artifact, knight, dinosaur skeleton, and painted witness<br>• Search the curator's desk; click the portrait to talk or type <b>examine painting</b> to inspect it<br>• Use the flashlight or a signal flare to get past the non-lethal gallery wraith; press <b>SPACE</b> near the fallen display to vault it<br>• In team mode, pass the investigation between players; all discoveries are shared");
+  else showInstr("BRIEFING — LEVEL 3", "<b>Goal:</b> Prove innocence — <b>5 evidence</b> pieces.<br><br>• Find the wall switch and click it to light the hall<br>• Walk up the staircase to reach the portrait landing<br>• Enter the <b>Study</b> through the door and inspect the clock, letter and weapon<br>• Question Vale and Anna; check the security terminal<br>• If the intruder appears, hold and use the signal flare, vault the overturned table with <b>SPACE</b>, and reach the study door before the distraction ends<br>• Return to the hall, then type <b>prove my innocence</b>");
 }
 function toggleMenu(){document.getElementById("sideMenu").classList.toggle("open");}
 function restartLevel(){resetLevel(state.level);document.getElementById("sideMenu").classList.remove("open");addMsg("system","Restarted.");}
@@ -3096,7 +3364,7 @@ function updateUI() {
   document.getElementById("sdgRuleLabel").textContent = sdgRule.label;
   document.getElementById("sdgRuleText").textContent = sdgRule.rule;
   document.getElementById("inventory").innerHTML = state.inventory.map(i=>{
-    const hl=/key|journal|flashlight/i.test(i.id)?" highlight":"";
+    const hl=/key|journal|flashlight|flare/i.test(i.id)?" highlight":"";
     const selected=equippedItemId===i.id?" selected":"";
     const uses=Number.isFinite(i.uses)?`<small>×${i.uses}</small>`:"";
     return `<button type="button" class="inv-item${hl}${selected}" title="${i.desc}" aria-pressed="${equippedItemId===i.id}" onclick="useItemById('${i.id}')"><span>${i.name}</span>${uses}</button>`;
@@ -3136,13 +3404,15 @@ function resetLevel(lvl) {
   if(phoneRig) phoneRig.visible=false;
   phoneRigOpen=false;
   previousHeldItem=null;
+  const encounterStatus=document.getElementById("encounterStatus");
+  if(encounterStatus) encounterStatus.hidden=true;
   state.level=lvl; state.turn=0; state.levelComplete=false; state.clues=[];
   state.memory.flashlightOn=false;
   if(flashlight) flashlight.intensity=0;
   state.requiredClues = lvl===1?4:lvl===2?4:5;
   document.getElementById("chatLog").innerHTML="";
   if (lvl===1) {
-    Object.assign(state.memory,{campExamined:false,climbedHill:false,roadExamined:false,treesExamined:false,streamUsed:false,messagesRead:0,flashlightOn:false});
+    Object.assign(state.memory,{foundObject:false,campExamined:false,climbedHill:false,roadExamined:false,treesExamined:false,streamUsed:false,messagesRead:0,flashlightOn:false});
     buildLevel1();
     state.health=85;state.food=3;state.water=2.5;state.safety=60;state.info=10;
     state.location="Unknown Wilderness";
@@ -3151,7 +3421,8 @@ function resetLevel(lvl) {
       {id:"flashlight",name:"🔦 Flashlight",uses:40,desc:"F to toggle"},{id:"meds",name:"🩹 Meds",uses:2,desc:"Heal"},
       {id:"phone",name:"📱 Phone",uses:5,desc:"Messages, live map, compass & case file"},
       {id:"map",name:"🗺️ Map",uses:Infinity,desc:"Hold a live map of your current level"},
-      {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"}
+      {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"},
+      {id:"flare",name:"🟠 Signal Flare",uses:2,desc:"Bright, non-harmful distraction · E to use"}
     ];
     state.objectives=[{text:"Orient yourself",done:false},{text:"Investigate campsite",done:false},{text:"Hill or road",done:false},{text:"Clues 0/4",done:false}];
     setScene("Use the field map to find the stream, hill, camp and road. Follow the footprints.");
@@ -3166,7 +3437,8 @@ function resetLevel(lvl) {
       {id:"flashlight",name:"🔦 Flashlight",uses:30,desc:"F"},
       {id:"phone",name:"📱 Phone",uses:3,desc:"Offline witness channels & case file"},
       {id:"map",name:"🗺️ Map",uses:Infinity,desc:"Hold a live museum floor plan"},
-      {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"}
+      {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"},
+      {id:"flare",name:"🟠 Signal Flare",uses:1,desc:"Bright, non-harmful distraction · E to use"}
     ];
     if(state.memory.foundObject){state.inventory.push({id:"key",name:"🗝️ Strange Key",uses:1,desc:"Chamber"});state.inventory.push({id:"journal",name:"📜 Torn Journal",uses:1,desc:"Warning"});}
     state.objectives=[{text:"Question exhibits",done:false},{text:"Search desk",done:false},{text:"Project Echo",done:false},{text:"Clues 0/4",done:false}];
@@ -3181,7 +3453,8 @@ function resetLevel(lvl) {
       {id:"flashlight",name:"🔦 Flashlight",uses:25,desc:"F"},
       {id:"phone",name:"📱 Phone",uses:2,desc:"Offline witness channels & case file"},
       {id:"map",name:"🗺️ Map",uses:Infinity,desc:"Hold a live manor floor plan"},
-      {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"}
+      {id:"compass",name:"🧭 Compass",uses:Infinity,desc:"Hold to read a live north bearing"},
+      {id:"flare",name:"🟠 Signal Flare",uses:2,desc:"Bright, non-harmful distraction · E to use"}
     ];
     if(state.memory.foundObject) state.inventory.push({id:"key",name:"🗝️ Strange Key",uses:1,desc:"Echo link"});
     state.objectives=[{text:"Enter study",done:false},{text:"Question Vale & Anna",done:false},{text:"CCTV",done:false},{text:"Evidence 0/5",done:false}];
@@ -3217,7 +3490,10 @@ function sendCommand() {
     if(/where|direction/.test(c)){addMsg("ai","Smoke north, hill west, road east, water south. Find 4 clues. Type 'help' for commands.");return;}
     addMsg("ai","I didn't recognize that action. Type 'help' to see commands for this level.");
   } else if(state.level===2){
-    if(/leave|ready|understand|continue/.test(c)&&state.clues.length>=state.requiredClues){state.levelComplete=true;addMsg("system","— LEVEL 2 COMPLETE —");setTimeout(()=>showScore(2),1200);return;}
+    if(/leave|ready|understand|continue/.test(c)&&state.clues.length>=state.requiredClues){
+      if(encounterState.active&&!encounterState.cleared){addMsg("warning","The gallery wraith still blocks the exit. Use the flashlight or a flare before leaving.");return;}
+      state.levelComplete=true;addMsg("system","— LEVEL 2 COMPLETE —");setTimeout(()=>showScore(2),1200);return;
+    }
     if(/artifact|egyptian|statue/.test(c)){talkArtifact();return;}
     if(/knight|armor|figure/.test(c)){talkKnight();return;}
     if(/dino|skeleton|pulse/.test(c)){talkDino();return;}
@@ -3244,10 +3520,10 @@ function sendCommand() {
 }
 function showCommandHelp() {
   const instructions = state.level===1
-    ? "Level 1: examine camp, road, trees, or stream; use phone or compass; climb the hill; grab or drop objects; type 'head east' or 'leave' after finding 4 clues."
+    ? "Level 1: examine camp, road, trees, or stream; use phone or compass; climb the hill; press Space near fallen timber to vault it. Hold the flashlight on the forest creature or use a signal flare, then leave after finding 4 clues."
     : state.level===2
-    ? "Level 2: click the Egyptian artifact, knight, dinosaur, or painting to open its field-phone chat. Ask in your own words or tap a suggested question. Examine the curator desk and open the chamber with your key; leave after finding 4 clues."
-    : "Level 3: enter the study; examine the clock, letter, or weapon; click Vale, Anna, or the portrait to open a private field-phone chat. Ask follow-ups or request a recap, then check CCTV and type 'prove my innocence' after finding 5 pieces of evidence.";
+    ? "Level 2: click the Egyptian artifact, knight, dinosaur, or painting to open its field-phone chat. Ask in your own words or tap a suggested question. Examine the curator desk, use the flashlight or signal flare to get past the wraith, and leave after finding 4 clues. Press Space near the fallen display to vault it."
+    : "Level 3: enter the study; examine the clock, letter, or weapon; click Vale, Anna, or the portrait to open a private field-phone chat. Ask follow-ups or request a recap, then check CCTV. If the intruder appears, hold and use the signal flare, press Space near the overturned table, reach the study door, and return to the hall before proving your innocence.";
   const teamTip = investigationTeam.members.length > 1 ? ` Team mode: press PASS TO NEXT or P to hand over the shared investigation.` : "";
   addMsg("ai",instructions + teamTip);
 }

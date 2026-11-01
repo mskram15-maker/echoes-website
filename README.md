@@ -25,6 +25,8 @@ ECHOES is a browser-based, first-person mystery adventure built around three con
 - See the Sustainable Development Goal (SDG) rule for the current level while you play.
 - Explore atmospheric exhibits and manor rooms with drifting dust and firelit accents.
 - Turn on the museum and manor lights, climb the manor staircase, and inspect its landing.
+- Face non-lethal encounters: repel the forest creature and museum wraith with a flashlight, or use a signal flare to create an escape window from the manor intruder.
+- Vault fallen timber and display furniture; being caught restarts the current level.
 - Listen to a different procedural soundtrack in each level—or stop the music whenever you like.
 
 ## Get started
@@ -56,16 +58,19 @@ npm run preview
 | Look around | Drag in the 3D scene |
 | Inspect an object | Click or tap it |
 | Toggle flashlight | **F** or the flashlight button |
-| Pick up or drop an object | **E** |
-| Use a held food, water, or medical item | **E** or **USE** |
+| Pick up or drop an object / use a held item | **E** |
+| Hold a food, water, medical kit, or flare | Select it in inventory or use the **FLARE** control |
+| Use the held food, water, medical kit, or flare | **E** or the on-screen action button |
 | Equip a map or compass | Select it in your inventory |
 | Open the field phone | **PHONE** button or select the phone in your inventory |
 | Use phone apps | Open **Messages**, **Field Map**, **Compass**, or **Case File** |
-| Climb the forest hill | **Space** |
+| Climb the forest hill or vault a nearby obstacle | **Space** |
 | Ask for suggestions | Type **help** in the command box |
 | Pass the co-op turn | **P** or **PASS TO NEXT** |
 
 Equip the paper map to see a live top-down view of your current level, or equip the compass to read its moving north needle. The phone's **Messages** app decrypts field dispatches in Level 1; in later levels, it opens local witness channels. **Field Map**, **Compass**, and **Case File** remain available as phone apps. In Levels 2 and 3, look for a wall switch to light the room. Walk up the staircase in the manor to inspect the upper landing. When you see **click to talk**, interact with a character to open their phone conversation. Choose a suggested question or type naturally into the message box. Close the phone with its × button or **Escape**. Use **STOP MUSIC** and **PLAY MUSIC** to control the soundtrack.
+
+Encounters are designed as non-lethal escape challenges, not combat. In Levels 1 and 2, aim and hold the flashlight on the approaching presence until the route is clear; a signal flare is another limited-use escape aid. In Level 3, use a flare to distract the intruder, vault the overturned table with **Space**, and reach the study door before the distraction ends. Threats pause while you review clues or use the field phone. If a threat catches you, that level restarts; clues and progress from other levels are retained.
 
 ## The three cases
 
